@@ -40,10 +40,6 @@ export function getMcpServers(): McpServersConfig {
       command: "uvx",
       args: ["mcp-server-fetch"],
     },
-    weather: { // weather mcp to test mcp functionality
-      command: "npx",
-      args: ["-y", "@h1deya/mcp-server-weather"], 
-    },
   };
 
   if (process.env.BRAVE_API_KEY) {
