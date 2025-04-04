@@ -7,6 +7,13 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 
+import {
+  convertMcpToLangchainTools,
+  McpServerCleanupFn,
+} from "./langchainMcpTools";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { getMcpServers } from "./mcpServers";
+
 const t = initTRPC.create();
 
 // Define the schema for a single message in the conversation
@@ -44,7 +51,8 @@ const getLlm = () => {
       azureOpenAIEndpoint: azureOpenAIEndpoint, // Use the corrected parameter name
       azureOpenAIApiDeploymentName: azureDeploymentName,
       azureOpenAIApiVersion: azureApiVersion,
-      modelName: "gpt-4o", // Optional: Specify model if needed, defaults usually work
+      modelName: "o3-mini", // Optional: Specify model if needed, defaults usually work
+      // reasoningEffort: "high", // optional to specify reasoning effort of agent
       temperature: 0.7, // Optional: Adjust temperature
     });
   } else if (hasOpenAIConfig) {
@@ -71,7 +79,7 @@ export const appRouter = t.router({
 
       // Prepend the system message
       const systemMessage = new SystemMessage(
-        "You are a general helper agent."
+        "You are a general helper agent that can use MCP servers to help the user."
       );
 
       // Convert frontend messages to Langchain format with specific types
@@ -86,7 +94,8 @@ export const appRouter = t.router({
         });
 
       const langchainMessages = [systemMessage, ...conversationHistory];
-
+      let mcpCleanup: McpServerCleanupFn | undefined;
+      let response: string;
       try {
         // console.log(
         //   "Invoking llm with messages: ",
@@ -94,20 +103,29 @@ export const appRouter = t.router({
         //   "\n\n"
         // );
         // Note: repositoryUrl and complianceData are in 'input' but not used here yet
-        const response = await llm.invoke(langchainMessages);
+        const mcpServers = getMcpServers();
+        const { tools, cleanup } = await convertMcpToLangchainTools(mcpServers);
+        mcpCleanup = cleanup;
+        const agent = createReactAgent({
+          llm,
+          tools,
+        });
+        const result = await agent.invoke({ messages: langchainMessages });
+
+        response = result.messages[result.messages.length - 1].content.toString();
         // console.log("Received response from chain: ", response);
 
         // The response from the chain should be a BaseMessage (likely AIMessage)
-        if (response && typeof response.content === "string") {
+        if (response && typeof response === "string") {
           return {
             role: "assistant",
-            content: response.content,
+            content: response,
           };
         } else {
           // Handle potential non-string content if necessary, maybe stringify?
           console.error(
             "LLM response content is not a string:",
-            response.content
+            response
           );
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -122,6 +140,8 @@ export const appRouter = t.router({
             error.message || "Unknown error"
           }`,
         });
+      } finally {
+        await mcpCleanup?.();
       }
     }),
 });

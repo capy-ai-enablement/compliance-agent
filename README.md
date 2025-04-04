@@ -2,6 +2,19 @@
 
 Focus on this project is to built something that creates value using as much AI tooling as possible.
 
+## Usage
+
+Installation and setup
+
+- Install uvx by running `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- `cp ./backend/.env.example ./backend/.env`
+- fill in .env file
+
+Usage
+
+- `pnpm dev`
+- open `localhost:5173` in the browser
+
 ## Features
 
 User features
