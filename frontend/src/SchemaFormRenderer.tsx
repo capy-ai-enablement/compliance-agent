@@ -1,6 +1,5 @@
 import React from 'react';
-// Removed unused z import: import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault, z } from 'zod';
-import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault } from 'zod'; // Keep necessary imports
+import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault } from 'zod';
 import { ComplianceData } from './schema';
 
 interface SchemaFormRendererProps {
@@ -21,14 +20,14 @@ function getBaseType(schema: ZodTypeAny): ZodTypeAny {
 }
 
 // Helper to generate a default value based on schema type (basic version)
-function generateDefaultValue(schema: ZodTypeAny): unknown { // Return unknown
+function generateDefaultValue(schema: ZodTypeAny): unknown {
     const baseType = getBaseType(schema);
     if (baseType instanceof ZodString) return '';
     if (baseType instanceof ZodArray) return [];
     if (baseType instanceof ZodObject) {
         // Recursively generate defaults for object properties
         const shape = baseType.shape;
-        const defaultObject: Record<string, unknown> = {}; // Use Record<string, unknown>
+        const defaultObject: Record<string, unknown> = {};
         Object.keys(shape).forEach(key => {
             defaultObject[key] = generateDefaultValue(shape[key]);
         });
@@ -41,45 +40,46 @@ function generateDefaultValue(schema: ZodTypeAny): unknown { // Return unknown
 
 const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
     schema,
-    data, // This 'data' now refers to the specific part of the structure being rendered
+    data,
     onDataChange,
     path = [],
-    fullData, // Use fullData for making immutable updates
+    fullData,
 }) => {
 
     // Helper function to handle data updates immutably using the full data object
     const handleValueChange = (
         currentPath: (string | number)[],
-        value: unknown // Use unknown
+        value: unknown
     ) => {
-        const newData = JSON.parse(JSON.stringify(fullData)); // Deep copy the original full data
+        const newData = JSON.parse(JSON.stringify(fullData)); // Deep copy
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let currentLevel: any = newData; // Use any here for dynamic navigation, checked below
+        let parentLevel: any = newData; // Use 'any' for dynamic navigation
 
-        // Navigate to the parent of the target element
+        // Navigate to the parent object/array
         for (let i = 0; i < currentPath.length - 1; i++) {
             const key = currentPath[i];
-            if (typeof currentLevel !== 'object' || currentLevel === null) {
+            if (typeof parentLevel !== 'object' || parentLevel === null) {
                 console.error("Error navigating path in handleValueChange", currentPath, key);
-                return; // Stop if path is invalid
+                return;
             }
-             // Ensure nested objects/arrays exist
-             if (currentLevel[key] === undefined || currentLevel[key] === null) {
+             // Ensure nested objects/arrays exist before navigating deeper
+             if (parentLevel[key] === undefined || parentLevel[key] === null) {
                  const nextKeyIsIndex = typeof currentPath[i+1] === 'number';
-                 currentLevel[key] = nextKeyIsIndex ? [] : {};
+                 parentLevel[key] = nextKeyIsIndex ? [] : {}; // Create array or object if needed
              }
-            currentLevel = currentLevel[key];
+            parentLevel = parentLevel[key];
         }
 
          // Ensure the parent level is an object or array before setting the value
-         if (typeof currentLevel !== 'object' || currentLevel === null) {
+         if (typeof parentLevel !== 'object' || parentLevel === null) {
              console.error("Error finding parent level in handleValueChange", currentPath);
              return;
          }
 
-        // Set the value at the final key/index
-        const finalKey = currentPath[currentPath.length - 1];
-        currentLevel[finalKey] = value;
+        // Set the value at the final key/index in the parent
+        const finalKeyOrIndex = currentPath[currentPath.length - 1];
+        parentLevel[finalKeyOrIndex] = value;
+
         onDataChange(newData); // Trigger update with the modified full data structure
     };
 
@@ -88,19 +88,19 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
     // --- Render Logic for Objects ---
     if (baseSchema instanceof ZodObject) {
         const shape = baseSchema.shape;
-        // Ensure data is an object before trying to access keys
         const objectData = (typeof data === 'object' && data !== null && !Array.isArray(data)) ? data : {};
 
         return (
-            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200' : 'p-4'}`}>
+            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200 ml-1' : 'p-4'}`}> {/* Added ml-1 for slight indent */}
                 {Object.keys(shape).map((key) => {
                     const fieldSchema = shape[key];
                     const currentPath = [...path, key];
-                    const fieldData = (objectData as Record<string, unknown>)?.[key]; // Access data safely
+                    const fieldData = (objectData as Record<string, unknown>)?.[key];
                     const description = fieldSchema.description || key;
 
                     return (
                         <div key={currentPath.join('.')} className="mb-3">
+                             {/* Render label only if not rendering an array directly */}
                              {!(getBaseType(fieldSchema) instanceof ZodArray) && (
                                 <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
                                     {description}
@@ -108,7 +108,7 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
                              )}
                             <SchemaFormRenderer
                                 schema={fieldSchema}
-                                data={fieldData} // Pass down the specific part of the data
+                                data={fieldData}
                                 onDataChange={onDataChange}
                                 path={currentPath}
                                 fullData={fullData}
@@ -128,17 +128,18 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
 
         return (
             <div className="mb-3 p-3 border rounded-md bg-gray-50">
-                <label className="block text-sm font-medium text-gray-700 mb-2 capitalize">
+                <label className="block text-sm font-medium text-gray-700 mb-2 capitalize font-semibold"> {/* Made label bold */}
                     {description}
                 </label>
+                {arrayData.length === 0 && <p className="text-xs text-gray-500 italic mb-2">No items yet.</p>}
                 {arrayData.map((item, index) => (
                     <div key={index} className="flex items-start mb-3 p-2 border rounded bg-white shadow-sm">
                         <div className="flex-grow">
                              <SchemaFormRenderer
-                                schema={elementType} // Pass the schema for the element type
-                                data={item} // Pass the specific item data
+                                schema={elementType}
+                                data={item}
                                 onDataChange={onDataChange}
-                                path={[...path, index]} // Path includes the array index
+                                path={[...path, index]}
                                 fullData={fullData}
                             />
                         </div>
@@ -146,9 +147,9 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
                             type="button"
                             onClick={() => {
                                 const newArray = arrayData.filter((_, i) => i !== index);
-                                handleValueChange(path, newArray); // Update the array at the current path
+                                handleValueChange(path, newArray);
                             }}
-                            className="ml-2 mt-1 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs self-start"
+                            className="ml-2 mt-1 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs self-start flex-shrink-0" // Added flex-shrink-0
                         >
                             Remove
                         </button>
@@ -157,9 +158,9 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
                 <button
                     type="button"
                     onClick={() => {
-                        const newItem = generateDefaultValue(elementType); // Generate default based on element schema
+                        const newItem = generateDefaultValue(elementType);
                         const newArray = [...arrayData, newItem];
-                        handleValueChange(path, newArray); // Update the array at the current path
+                        handleValueChange(path, newArray);
                     }}
                     className="mt-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
                 >
@@ -173,8 +174,8 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
     if (baseSchema instanceof ZodString) {
         return (
             <textarea
-                id={path.join('.')}
-                value={String(data ?? '')} // Ensure value is a string
+                // Removed id={path.join('.')} as label uses className now
+                value={String(data ?? '')}
                 onChange={(e) => handleValueChange(path, e.target.value)}
                 rows={3}
                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"

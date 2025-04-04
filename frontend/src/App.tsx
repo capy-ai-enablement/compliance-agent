@@ -8,7 +8,6 @@ import {
   // BackendResponseSchema // For future use
 } from "./schema"; // Assuming schema.ts is in the same directory
 import { z } from "zod";
-// Removed JSONInput imports
 import SchemaFormRenderer from "./SchemaFormRenderer"; // Import the new component
 
 import {
@@ -21,7 +20,7 @@ import {
 // --- Local Storage Keys ---
 const REPO_URL_STORAGE_KEY = "complianceAgentRepoUrl";
 const COMPLIANCE_DATA_STORAGE_KEY = "complianceAgentData";
-const CHAT_MESSAGES_STORAGE_KEY = "complianceAgentMessages"; // New key for messages
+const CHAT_MESSAGES_STORAGE_KEY = "complianceAgentMessages";
 
 function App() {
   const [repositoryUrl, setRepositoryUrl] = useState<string>("");
@@ -32,20 +31,17 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false); // For future API calls
   const [error, setError] = useState<string | null>(null); // For displaying errors
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true); // Flag for initial load
-  // Removed editorKey state
 
   // --- Load state from Local Storage on mount ---
   useEffect(() => {
-    console.log("Effect 1: Loading from localStorage START");
     // Load Repository URL
     const storedRepoUrl = localStorage.getItem(REPO_URL_STORAGE_KEY);
     if (storedRepoUrl) {
       try {
         const parsedUrl = z.string().parse(storedRepoUrl);
         setRepositoryUrl(parsedUrl);
-        console.log("Effect 1: Loaded Repo URL");
       } catch (e) {
-        console.error("Effect 1: Failed to parse stored repository URL:", e);
+        console.error("Failed to parse stored repository URL:", e);
         localStorage.removeItem(REPO_URL_STORAGE_KEY);
       }
     }
@@ -57,15 +53,14 @@ function App() {
         const parsedData = JSON.parse(storedComplianceData);
         const complianceValidationResult = ComplianceContentSchema.safeParse(parsedData);
         if (complianceValidationResult.success) {
-          setComplianceData(complianceValidationResult.data); // Set state
-           console.log("Effect 1: Loaded valid Compliance Data");
+          setComplianceData(complianceValidationResult.data);
         } else {
-          console.error("Effect 1: Stored compliance data failed validation:", complianceValidationResult.error);
+          console.error("Stored compliance data failed validation:", complianceValidationResult.error);
           setError("Failed to load saved data. It might be corrupted. Resetting to default.");
           setComplianceData(initialComplianceData);
         }
       } catch (e) {
-        console.error("Effect 1: Failed to parse stored compliance data:", e);
+        console.error("Failed to parse stored compliance data:", e);
         setError("Failed to load saved data. Resetting to default.");
         localStorage.removeItem(COMPLIANCE_DATA_STORAGE_KEY);
         setComplianceData(initialComplianceData);
@@ -83,64 +78,27 @@ function App() {
             ...msg,
             timestamp: new Date(msg.timestamp),
           }));
-          setMessages(runtimeMessages); // Set state
-           console.log("Effect 1: Loaded valid Messages");
+          setMessages(runtimeMessages);
         } else {
-          console.error("Effect 1: Stored chat messages failed validation:", messagesValidationResult.error);
+          console.error("Stored chat messages failed validation:", messagesValidationResult.error);
           setError("Failed to load chat history. It might be corrupted. Clearing history.");
           localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY);
           setMessages([]);
         }
       } catch (e) {
-        console.error("Effect 1: Failed to parse stored chat messages:", e);
+        console.error("Failed to parse stored chat messages:", e);
         setError("Failed to load chat history. Clearing history.");
         localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY);
         setMessages([]);
       }
     }
-     console.log("Effect 1: Loading from localStorage END");
-    setIsInitialLoad(false); // Mark initial load as complete (moved here)
+    setIsInitialLoad(false); // Mark initial load as complete
   }, []); // Runs only once on mount
 
-  // Removed Effect 2
+  // --- Save state to Local Storage on change ---
 
-  // Effect 3: Save complianceData (only after initial load)
+  // Save repositoryUrl
   useEffect(() => {
-    if (isInitialLoad) {
-       console.log("Effect 3: Skipping compliance save (initial load)");
-      return;
-    }
-    console.log("Effect 3: Saving compliance data");
-    try {
-      localStorage.setItem(COMPLIANCE_DATA_STORAGE_KEY, JSON.stringify(complianceData));
-    } catch (e) {
-      console.error("Effect 3: Failed to save compliance data to local storage:", e);
-      setError("Failed to save progress.");
-    }
-  }, [complianceData, isInitialLoad]); // Add isInitialLoad dependency here
-
-  // Effect 4: Save messages (only after initial load)
-  useEffect(() => {
-    if (isInitialLoad) {
-       console.log("Effect 4: Skipping messages save (initial load)");
-      return;
-    }
-     console.log("Effect 4: Saving messages");
-    try {
-      const messagesToStore: StoredChatMessage[] = messages.map((msg) => ({
-        ...msg,
-        timestamp: msg.timestamp.toISOString(),
-      }));
-      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messagesToStore));
-    } catch (e) {
-      console.error("Effect 4: Failed to save chat messages to local storage:", e);
-      setError("Failed to save chat history.");
-    }
-  }, [messages, isInitialLoad]); // Add isInitialLoad dependency here
-
-  // Effect 5: Save repositoryUrl
-   useEffect(() => {
-    // No need for isInitialLoad check here as it's independent
     if (repositoryUrl) {
       localStorage.setItem(REPO_URL_STORAGE_KEY, repositoryUrl);
     } else {
@@ -148,13 +106,41 @@ function App() {
     }
   }, [repositoryUrl]);
 
+  // Save complianceData (only after initial load)
+  useEffect(() => {
+    if (isInitialLoad) {
+      return;
+    }
+    try {
+      localStorage.setItem(COMPLIANCE_DATA_STORAGE_KEY, JSON.stringify(complianceData));
+    } catch (e) {
+      console.error("Failed to save compliance data to local storage:", e);
+      setError("Failed to save progress.");
+    }
+  }, [complianceData, isInitialLoad]);
 
+  // Save messages (only after initial load)
+  useEffect(() => {
+    if (isInitialLoad) {
+      return;
+    }
+    try {
+      const messagesToStore: StoredChatMessage[] = messages.map((msg) => ({
+        ...msg,
+        timestamp: msg.timestamp.toISOString(),
+      }));
+      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messagesToStore));
+    } catch (e) {
+      console.error("Failed to save chat messages to local storage:", e);
+      setError("Failed to save chat history.");
+    }
+  }, [messages, isInitialLoad]);
+
+  // --- Event Handlers ---
   const handleUrlChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRepositoryUrl(event.target.value);
     setError(null);
   };
-
-  // Removed handleComplianceDataChange callback
 
   const handleSendMessage = useCallback(
     async (messageText: string) => {
@@ -163,26 +149,30 @@ function App() {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
       setError(null);
+
+      // --- Mock Backend Interaction ---
       const messagesForBackend: StoredChatMessage[] = [...messages, userMessage].map((msg) => ({ ...msg, timestamp: msg.timestamp.toISOString() }));
-      console.log("Sending to backend (mock):", { repositoryUrl, complianceData, messages: messagesForBackend });
+      console.log("Sending to backend (mock):", { repositoryUrl, complianceData, messages: messagesForBackend }); // Keep mock log for now
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const mockAgentResponseStored: StoredChatMessage = { sender: "agent", text: `Received: "${messageText}". I'm just a mock response for now.`, timestamp: new Date().toISOString() };
-      const mockUpdatedData = { ...complianceData, lawsAndRegulations: [...complianceData.lawsAndRegulations, `Mock Law related to "${messageText.substring(0, 10)}..."`] };
+      // Example of how backend might update compliance data - currently not used by mock
+      // const mockUpdatedData = { ...complianceData, lawsAndRegulations: [...complianceData.lawsAndRegulations, `Mock Law related to "${messageText.substring(0, 10)}..."`] };
       const mockAgentResponseRuntime: ChatMessage = { ...mockAgentResponseStored, timestamp: new Date(mockAgentResponseStored.timestamp) };
       setMessages((prev) => [...prev, mockAgentResponseRuntime]);
-      console.log("Received from backend (mock):", { newMessage: mockAgentResponseStored, updatedComplianceData: mockUpdatedData });
       // If backend could update compliance data, we'd call setComplianceData here
       // setComplianceData(mockUpdatedData);
+      console.log("Received from backend (mock):", { newMessage: mockAgentResponseStored /*, updatedComplianceData: mockUpdatedData */ }); // Keep mock log
+      // --- End Mock Backend Interaction ---
+
       setIsLoading(false);
     },
-    [repositoryUrl, complianceData, messages, isLoading] // Removed handleComplianceDataChange dependency
+    [repositoryUrl, complianceData, messages, isLoading]
   );
 
   // --- Render ---
-  console.log("Render: isInitialLoad=", isInitialLoad, "complianceData=", complianceData);
   return (
      <div className="flex h-screen bg-gray-100 font-sans">
-      {/* Left Panel: Repo URL + Compliance Data Editor */}
+      {/* Left Panel: Repo URL + Compliance Data Form */}
       <div className="flex-grow flex flex-col p-4 overflow-hidden">
         {/* Repository URL Input */}
         <div className="mb-4">
@@ -191,16 +181,16 @@ function App() {
         </div>
         {/* Error Display */}
         {error && (<div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"><strong>Error:</strong> {error}</div>)}
-        {/* Compliance Data Display/Editor Area */}
+        {/* Compliance Data Form Area */}
         <div className="flex-grow bg-white border border-gray-300 rounded-md overflow-hidden flex flex-col">
           <h2 className="text-lg font-semibold p-4 pb-2 text-gray-800 border-b border-gray-200">Compliance Data Form</h2>
           <div className="flex-grow overflow-auto">
             {isInitialLoad ? (<div className="p-4 text-gray-500">Loading form...</div>) : (
               <SchemaFormRenderer
-                schema={ComplianceContentSchema} // Pass the Zod schema
+                schema={ComplianceContentSchema}
                 data={complianceData}
-                onDataChange={setComplianceData} // Pass the state setter
-                fullData={complianceData} // Pass the full data for updates
+                onDataChange={setComplianceData}
+                fullData={complianceData}
               />
             )}
           </div>
