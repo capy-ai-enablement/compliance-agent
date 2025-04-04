@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"; // Added useRef
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 // Import schemas from the backend
 import {
   ComplianceContentSchema,
@@ -49,6 +49,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<ComplianceSectionKey>(TABS[0].key); // State for active tab
+  const [chatPanelWidth, setChatPanelWidth] = useState<number>(384); // Initial width (w-96 = 24rem = 384px)
+  const isResizing = useRef<boolean>(false); // Ref to track resizing state
 
   // --- tRPC Mutation for generating response ---
   const generateResponseMutation = trpc.generateResponse.useMutation();
@@ -197,22 +199,29 @@ function App() {
 
       // --- Frontend Validation ---
       // Use the placeholder URL if the input is empty, otherwise use the input
-      const defaultRepoUrl = "https://github.com/capy-ai-enablement/compliance-agent";
-      const urlToUse = repositoryUrl.trim() === "" ? defaultRepoUrl : repositoryUrl;
+      const defaultRepoUrl =
+        "https://github.com/capy-ai-enablement/compliance-agent";
+      const urlToUse =
+        repositoryUrl.trim() === "" ? defaultRepoUrl : repositoryUrl;
 
       // Validate the URL that will be used (either user input or default)
       const urlValidation = z.string().url().safeParse(urlToUse);
       if (!urlValidation.success) {
         // Only show error if the user actually typed something invalid
         if (repositoryUrl.trim() !== "") {
-            setError("Please enter a valid repository URL or leave it blank to use the default.");
-            return; // Stop execution if user input is invalid
+          setError(
+            "Please enter a valid repository URL or leave it blank to use the default."
+          );
+          return; // Stop execution if user input is invalid
         } else {
-            // If the default URL is somehow invalid (should not happen), log error but proceed
-            console.error("Default repository URL failed validation:", urlValidation.error);
-            // Optionally, you could set an error state here too, but it might be confusing
-            // setError("Default repository URL seems invalid. Please contact support.");
-            // return; // Decide if you want to block sending even if the default is broken
+          // If the default URL is somehow invalid (should not happen), log error but proceed
+          console.error(
+            "Default repository URL failed validation:",
+            urlValidation.error
+          );
+          // Optionally, you could set an error state here too, but it might be confusing
+          // setError("Default repository URL seems invalid. Please contact support.");
+          // return; // Decide if you want to block sending even if the default is broken
         }
       }
       // --- End Frontend Validation ---
@@ -229,13 +238,12 @@ function App() {
 
       // Prepare payload for the backend using GenerateResponseInput type
       // Map runtime messages (Date) to stored format (string timestamp) for the API call
-      const messagesForBackend: StoredChatMessage[] = currentRuntimeMessages.map(
-        (msg) => ({
+      const messagesForBackend: StoredChatMessage[] =
+        currentRuntimeMessages.map((msg) => ({
           role: msg.role,
           text: msg.text,
           timestamp: msg.timestamp.toISOString(),
-        })
-      );
+        }));
 
       // Use the renamed input type
       const payload: AgentRequestInput = {
@@ -295,6 +303,54 @@ function App() {
     setError(null);
     console.log("Chat history cleared.");
   }, []);
+
+  // --- Resize Handlers ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent text selection during drag
+    isResizing.current = true;
+    // Add global listeners in useEffect below
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    // Calculate new width based on mouse position relative to the right edge of the window
+    const newWidth = window.innerWidth - e.clientX;
+    // Add constraints (e.g., min 200px, max 800px)
+    const minWidth = 200;
+    const maxWidth = 800;
+    const constrainedWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+    setChatPanelWidth(constrainedWidth);
+  }, []); // No dependencies needed as it reads window/event properties
+
+  const handleMouseUp = useCallback(() => {
+    if (isResizing.current) {
+      isResizing.current = false;
+      // Remove global listeners in useEffect below
+      // Optional: Save width to local storage here
+      // localStorage.setItem('chatPanelWidth', chatPanelWidth.toString());
+    }
+  }, []); // No dependencies needed
+
+  // --- Add/Remove Global Event Listeners for Resize ---
+  useEffect(() => {
+    // Only add listeners if resizing is active (controlled by handleMouseDown/Up)
+    // This effect runs when handleMouseMove or handleMouseUp functions change,
+    // which they don't, but it's standard practice to include them if used inside.
+    // A better approach might be to add/remove listeners directly in Down/Up handlers,
+    // but this useEffect pattern is also common.
+
+    // Let's refine: Add listeners on mount, remove on unmount.
+    // The actual logic execution is controlled by isResizing.current.
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    // Cleanup function to remove listeners when component unmounts
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]); // Re-attach if handlers change (they won't here)
+
 
   // --- Memoize Data for the Active Tab ---
   // activeSchema removed as it's no longer used directly by the renderer call
@@ -375,10 +431,21 @@ function App() {
         </div>
       </div>
 
-      {/* Right Panel: Chat Interface (Remains the same) */}
-      <div className="w-96 flex flex-col bg-white border-l border-gray-300 shadow-lg">
+      {/* Drag Handle */}
+      <div
+        className="w-2 cursor-col-resize bg-gray-300 hover:bg-gray-400 active:bg-gray-500 flex-shrink-0" // Use flex-shrink-0 class
+        // style={{ flexShrink: 0 }} // Redundant if using class
+        onMouseDown={handleMouseDown} // Attach mouse down handler
+      ></div>
+
+      {/* Right Panel: Chat Interface */}
+      {/* Use inline style for dynamic width, remove fixed width class */}
+      <div
+        className="flex flex-col bg-white border-l border-gray-300 shadow-lg flex-shrink-0" // Use flex-shrink-0 class
+        style={{ width: `${chatPanelWidth}px` }} // Apply dynamic width only
+      >
         {/* Chat Header */}
-        <div className="p-3 border-b border-gray-300 flex justify-between items-center bg-gray-50">
+        <div className="p-3 border-b border-gray-300 flex justify-between items-center bg-gray-50 flex-shrink-0"> {/* Prevent header shrink */}
           <h2 className="text-md font-semibold text-gray-700">Conversation</h2>
           <button
             onClick={handleResetChat}
@@ -403,17 +470,17 @@ function App() {
                   msg.role === "user"
                     ? "bg-blue-500 text-white"
                     : "bg-gray-200 text-gray-800"
-                 }`}
-                >
-                  {/* Wrap ReactMarkdown in a div for styling */}
-                  <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.text}
-                    </ReactMarkdown>
-                  </div>
-                  <p className="text-xs text-right mt-1 opacity-70">
-                    {msg.timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
+                }`}
+              >
+                {/* Wrap ReactMarkdown in a div for styling */}
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text}
+                  </ReactMarkdown>
+                </div>
+                <p className="text-xs text-right mt-1 opacity-70">
+                  {msg.timestamp.toLocaleTimeString([], {
+                    hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </p>
