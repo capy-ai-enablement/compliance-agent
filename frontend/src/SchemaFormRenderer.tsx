@@ -46,6 +46,32 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
     fullData,
 }) => {
 
+    // --- Determine the Schema to Render ---
+    // If path has length 1, it's the initial call from App.tsx. Navigate the main schema.
+    // Otherwise, it's a recursive call, and the 'schema' prop is already the correct sub-schema.
+    let schemaToRender: ZodTypeAny;
+    if (path && path.length === 1) {
+        const initialSegment = path[0];
+        const baseSchema = getBaseType(schema); // Use the original schema passed from App
+         if (baseSchema instanceof ZodObject && typeof initialSegment === 'string') {
+             schemaToRender = baseSchema.shape[initialSegment];
+         } else {
+             // This case shouldn't happen based on App.tsx usage, but handle defensively
+             console.error("Invalid initial path segment for schema navigation:", path, initialSegment);
+             return <div className="text-red-500 text-sm">Error: Invalid initial path.</div>;
+         }
+         if (!schemaToRender) {
+              console.error("Schema not found for initial path segment:", path, initialSegment);
+              return <div className="text-red-500 text-sm">Error: Schema not found for initial path.</div>;
+         }
+    } else {
+        // For recursive calls (path.length === 0 or path.length > 1),
+        // the schema prop is already the correct sub-schema passed down.
+        schemaToRender = schema;
+    }
+    // --- End Schema Determination ---
+
+
     // Helper function to handle data updates immutably using the full data object
     const handleValueChange = (
         currentPath: (string | number)[],
@@ -83,7 +109,8 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
         onDataChange(newData); // Trigger update with the modified full data structure
     };
 
-    const baseSchema = getBaseType(schema);
+    // Use the determined schemaToRender from here on
+    const baseSchema = getBaseType(schemaToRender);
 
     // --- Render Logic for Objects ---
     if (baseSchema instanceof ZodObject) {
@@ -91,7 +118,7 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
         const objectData = (typeof data === 'object' && data !== null && !Array.isArray(data)) ? data : {};
 
         return (
-            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200 ml-1' : 'p-4'}`}> {/* Added ml-1 for slight indent */}
+            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200 ml-1' : 'p-4'}`}>
                 {Object.keys(shape).map((key) => {
                     const fieldSchema = shape[key];
                     const currentPath = [...path, key];
@@ -107,7 +134,7 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
                                 </label>
                              )}
                             <SchemaFormRenderer
-                                schema={fieldSchema}
+                                schema={fieldSchema} // Pass the specific field schema for recursion
                                 data={fieldData}
                                 onDataChange={onDataChange}
                                 path={currentPath}
@@ -122,9 +149,9 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
 
     // --- Render Logic for Arrays ---
     if (baseSchema instanceof ZodArray) {
-        const elementType = baseSchema.element;
+        const elementType = baseSchema.element; // Correct element type from the navigated schema
         const arrayData = Array.isArray(data) ? data : [];
-        const description = schema.description || 'Items';
+        const description = schemaToRender.description || 'Items'; // Use description from the correct schema
 
         return (
             <div className="mb-3 p-3 border rounded-md bg-gray-50">
@@ -136,7 +163,7 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
                     <div key={index} className="flex items-start mb-3 p-2 border rounded bg-white shadow-sm">
                         <div className="flex-grow">
                              <SchemaFormRenderer
-                                schema={elementType}
+                                schema={elementType} // Pass the array element schema for recursion
                                 data={item}
                                 onDataChange={onDataChange}
                                 path={[...path, index]}

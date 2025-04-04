@@ -14,32 +14,41 @@ const DataPointSchema = z.object({
 
 const ThreatVulnerabilitySchema = z.object({
   description: z.string().describe("Description of the threat or vulnerability"),
-  relatedDataPoints: z.array(z.string()).optional().describe("Names of related data points (optional)"),
-}).describe("Identified threat or vulnerability");
+  // relatedDataPoints removed as requested
+  mitigations: z.array(z.lazy(() => MitigationSchema)).describe("List of proposed mitigations for this threat"), // Nest mitigations
+}).describe("Identified threat or vulnerability and its mitigations");
 
 const MitigationSchema = z.object({
   description: z.string().describe("Description of the mitigation strategy"),
-  relatedThreats: z.array(z.string()).optional().describe("Names of related threats/vulnerabilities (optional)"),
+  // relatedThreats removed as requested
 }).describe("Mitigation strategy");
 
-// Define the main compliance schema
+// New General section schema
+const GeneralSchema = z.object({
+    description: z.string().describe("Brief description of the project/repository context"),
+}).describe("General project information");
+
+
+// Define the main compliance schema with the new structure
 // Note: repositoryUrl is handled separately in the UI state, not part of the stored JSON blob itself.
 export const ComplianceContentSchema = z.object({
+  general: GeneralSchema.describe("General project information"),
   lawsAndRegulations: z.array(z.string()).describe("List of relevant laws and regulations"),
   dataPoints: z.array(DataPointSchema).describe("List of identified data points"),
-  threatsAndVulnerabilities: z.array(ThreatVulnerabilitySchema).describe("List of identified threats and vulnerabilities"),
-  mitigations: z.array(MitigationSchema).describe("List of proposed mitigations"),
+  threatsAndVulnerabilities: z.array(ThreatVulnerabilitySchema).describe("List of identified threats, vulnerabilities, and their mitigations"),
+  // Top-level mitigations removed, now nested under threats
 }).describe("Compliance assessment structure for a repository");
 
 // Define a type for convenience
 export type ComplianceData = z.infer<typeof ComplianceContentSchema>;
 
-// Define an initial empty state that conforms to the schema structure
+// Define an initial empty state that conforms to the new schema structure
 export const initialComplianceData: ComplianceData = {
+    general: { description: "" }, // Initialize general section
     lawsAndRegulations: [],
     dataPoints: [],
     threatsAndVulnerabilities: [],
-    mitigations: [],
+    // mitigations removed from initial state
 };
 
 // Schema for the chat message structure (using ISO string for timestamp for easier storage)
