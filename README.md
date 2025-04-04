@@ -38,6 +38,7 @@ Dev features
 
 - typescript
 - pnpm
+- trpc
 - react vite webpage frontend
 - tailwind css
 - node express backend

@@ -169,6 +169,14 @@ function App() {
     [repositoryUrl, complianceData, messages, isLoading]
   );
 
+  // Clears chat history directly without confirmation
+  const handleResetChat = useCallback(() => {
+    setMessages([]);
+    localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY);
+    setError(null); // Clear any previous errors related to chat loading
+    console.log("Chat history cleared.");
+  }, []); // No dependencies needed as it only uses setters and constants
+
   // --- Render ---
   return (
      <div className="flex h-screen bg-gray-100 font-sans">
@@ -198,6 +206,18 @@ function App() {
       </div>
       {/* Right Panel: Chat Interface */}
       <div className="w-96 flex flex-col bg-white border-l border-gray-300 shadow-lg">
+        {/* Chat Header */}
+        <div className="p-3 border-b border-gray-300 flex justify-between items-center bg-gray-50">
+          <h2 className="text-md font-semibold text-gray-700">Conversation</h2>
+          <button
+            onClick={handleResetChat}
+            className="px-3 py-1 text-lg font-bold text-gray-600 bg-gray-200 rounded hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={messages.length === 0} // Disable if no messages
+            title="Clear Chat History"
+          >
+            +
+          </button>
+        </div>
         {/* Chat Messages Area */}
         <div className="flex-grow p-4 overflow-y-auto space-y-4">
           {messages.map((msg, index) => (
