@@ -27,6 +27,7 @@ Dev features
 - Render zod schema as frontend and fill with JSON content
 - Render any zod schema as frontend and make the JSON content editable by user
 - JSON report content and current conversation state stored in browser localstorage for now
+- One `pnpm dev` command in root to run entire application locally
 
 ### Frontend view
 
