@@ -1,24 +1,7 @@
 import express, { Express } from 'express';
-import { initTRPC } from '@trpc/server';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
-import { z } from 'zod';
 import cors from 'cors'; // Need CORS for frontend interaction
-
-// Initialize tRPC
-const t = initTRPC.create();
-
-// Create router and procedure
-const appRouter = t.router({
-  hello: t.procedure
-    .input(z.object({ name: z.string().optional() }))
-    .query(({ input }) => {
-      return `Hello ${input.name || 'world'}!`;
-    }),
-  // Add more procedures here as needed
-});
-
-// Export the router type
-export type AppRouter = typeof appRouter;
+import { appRouter } from './router'; // Import the router
 
 const app: Express = express();
 const port = process.env.PORT || 3001; // Use 3001 to avoid conflict with frontend default (5173)
