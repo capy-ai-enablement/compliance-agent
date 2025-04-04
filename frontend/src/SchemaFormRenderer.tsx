@@ -1,6 +1,7 @@
 import React from 'react';
 import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodNumber, ZodDefault, ZodLazy } from 'zod'; // Added ZodNumber and ZodLazy
-import { ComplianceData } from './schema';
+// Import the type from the backend schema file
+import type { ComplianceData } from '../../backend/src/schemas';
 
 interface SchemaFormRendererProps {
     schema: ZodTypeAny; // Accept any Zod type for recursion

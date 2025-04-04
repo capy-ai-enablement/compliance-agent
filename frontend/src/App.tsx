@@ -1,26 +1,36 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react"; // Added useMemo
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+// Import schemas from the backend
 import {
   ComplianceContentSchema,
-  ComplianceData,
   initialComplianceData,
-  ChatMessage,
-  StoredChatMessage,
   ChatMessageSchema,
-} from "./schema";
+} from "../../backend/src/schemas"; // Adjusted path
+import type { ComplianceData } from "../../backend/src/schemas"; // Import type separately
 import { z } from "zod";
 import SchemaFormRenderer from "./SchemaFormRenderer";
-import { trpc } from "./trpc";
-import { TRPCClientError } from "@trpc/client"; // Import for error handling
+// Import tRPC client and renamed inferred types
+import { trpc, AgentRequestInput, AgentResponseOutput } from "./trpc";
+import { TRPCClientError } from "@trpc/client";
+
+// Define the runtime ChatMessage type locally (using Date object)
+type ChatMessage = {
+  role: "user" | "agent";
+  text: string;
+  timestamp: Date;
+};
+
+// Define the stored ChatMessage type (using string timestamp) - inferred from schema
+type StoredChatMessage = z.infer<typeof ChatMessageSchema>;
 
 // --- Constants ---
 const REPO_URL_STORAGE_KEY = "complianceAgentRepoUrl";
 const COMPLIANCE_DATA_STORAGE_KEY = "complianceAgentData";
 const CHAT_MESSAGES_STORAGE_KEY = "complianceAgentMessages";
 
-// Define the keys for the main sections of the schema
+// Define the keys for the main sections of the schema (remains the same)
 type ComplianceSectionKey = keyof ComplianceData;
 
-// Define the tabs based on the schema structure
+// Define the tabs based on the schema structure (remains the same)
 const TABS: { key: ComplianceSectionKey; label: string }[] = [
   { key: "general", label: "General" },
   { key: "lawsAndRegulations", label: "Laws & Regulations" },
@@ -31,10 +41,9 @@ const TABS: { key: ComplianceSectionKey; label: string }[] = [
 function App() {
   const [repositoryUrl, setRepositoryUrl] = useState<string>("");
   const [complianceData, setComplianceData] = useState<ComplianceData>(
-    initialComplianceData
+    initialComplianceData // Use imported initial data
   );
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // const [isLoading, setIsLoading] = useState<boolean>(false); // Replaced by mutation.isPending
+  const [messages, setMessages] = useState<ChatMessage[]>([]); // Uses local runtime ChatMessage type
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<ComplianceSectionKey>(TABS[0].key); // State for active tab
@@ -96,14 +105,17 @@ function App() {
     const storedMessagesData = localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
     if (storedMessagesData) {
       try {
-        const parsedMessages = JSON.parse(storedMessagesData);
+        const parsedStoredMessages = JSON.parse(storedMessagesData);
+        // Validate against the imported ChatMessageSchema
         const messagesValidationResult = z
           .array(ChatMessageSchema)
-          .safeParse(parsedMessages);
+          .safeParse(parsedStoredMessages);
         if (messagesValidationResult.success) {
+          // Map stored format (string timestamp) to runtime format (Date object)
           const runtimeMessages: ChatMessage[] =
-            messagesValidationResult.data.map((msg) => ({
-              ...msg,
+            messagesValidationResult.data.map((msg: StoredChatMessage) => ({
+              role: msg.role,
+              text: msg.text,
               timestamp: new Date(msg.timestamp), // Convert ISO string back to Date
             }));
           setMessages(runtimeMessages);
@@ -153,8 +165,10 @@ function App() {
   useEffect(() => {
     if (isInitialLoad) return;
     try {
+      // Map runtime format (Date object) back to stored format (string timestamp)
       const messagesToStore: StoredChatMessage[] = messages.map((msg) => ({
-        ...msg,
+        role: msg.role,
+        text: msg.text,
         timestamp: msg.timestamp.toISOString(), // Convert Date to ISO string
       }));
       localStorage.setItem(
@@ -177,39 +191,75 @@ function App() {
 
   const handleSendMessage = useCallback(
     async (messageText: string) => {
-      if (!messageText.trim() || generateResponseMutation.isPending) return; // Use mutation's loading state
+      if (!messageText.trim() || generateResponseMutation.isPending) return;
 
+      // --- Frontend Validation ---
+      // Validate repository URL before sending
+      const urlValidation = z.string().url().safeParse(repositoryUrl);
+      if (!urlValidation.success) {
+        setError("Please enter a valid repository URL before sending a message.");
+        return; // Stop execution if URL is invalid
+      }
+      // --- End Frontend Validation ---
+
+      // Create runtime user message
       const userMessage: ChatMessage = {
         role: "user",
         text: messageText,
         timestamp: new Date(),
       };
-      const currentMessages = [...messages, userMessage];
-      setMessages(currentMessages); // Add user message immediately
+      const currentRuntimeMessages = [...messages, userMessage];
+      setMessages(currentRuntimeMessages); // Add user message immediately (runtime format)
       setError(null);
 
-      // Prepare messages for the backend (map sender/text to role/content with type assertion)
-      const messagesForBackend = currentMessages.map((msg) => ({
-        role: (msg.role === "user" ? "user" : "assistant") as
-          | "user"
-          | "assistant", // Assert role type
-        content: msg.text,
-      }));
+      // Prepare payload for the backend using GenerateResponseInput type
+      // Map runtime messages (Date) to stored format (string timestamp) for the API call
+      const messagesForBackend: StoredChatMessage[] = currentRuntimeMessages.map(
+        (msg) => ({
+          role: msg.role,
+          text: msg.text,
+          timestamp: msg.timestamp.toISOString(),
+        })
+      );
+
+      // Use the renamed input type
+      const payload: AgentRequestInput = {
+        messages: messagesForBackend,
+        repositoryUrl: repositoryUrl, // Pass repositoryUrl (required by backend schema)
+        complianceData: complianceData, // Pass complianceData (required by backend schema)
+      };
 
       try {
-        const response = await generateResponseMutation.mutateAsync({
-          messages: messagesForBackend,
-          repositoryUrl: repositoryUrl || undefined, // Pass optional fields
-          complianceData: complianceData || undefined,
-        });
+        // Use the renamed output type
+        const response: AgentResponseOutput =
+          await generateResponseMutation.mutateAsync(payload);
 
-        // Add agent response
+        // Process agent response (newMessage is in StoredChatMessage format)
         const agentMessage: ChatMessage = {
-          role: "agent",
-          text: response.content, // Assuming response has { role: 'assistant', content: string }
-          timestamp: new Date(),
+          role: response.newMessage.role,
+          text: response.newMessage.text,
+          timestamp: new Date(response.newMessage.timestamp), // Convert string timestamp to Date
         };
         setMessages((prev) => [...prev, agentMessage]);
+
+        // Update compliance data if the backend provided it
+        if (response.updatedComplianceData) {
+          // Validate the received compliance data before setting state
+          const validationResult = ComplianceContentSchema.safeParse(
+            response.updatedComplianceData
+          );
+          if (validationResult.success) {
+            setComplianceData(validationResult.data);
+          } else {
+            console.error(
+              "Received invalid compliance data from backend:",
+              validationResult.error
+            );
+            setError(
+              "Received invalid data structure from the agent. Please check backend logs."
+            );
+          }
+        }
       } catch (err) {
         console.error("Error calling generateResponse:", err);
         let errorMessage = "Failed to get response from agent.";

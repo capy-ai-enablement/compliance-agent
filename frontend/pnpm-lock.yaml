@@ -43,6 +43,9 @@ devDependencies:
   '@eslint/js':
     specifier: ^9.21.0
     version: 9.23.0
+  '@trpc/server':
+    specifier: ^11.0.2
+    version: 11.0.2(typescript@5.8.2)
   '@types/react':
     specifier: ^19.0.10
     version: 19.1.0
@@ -1144,7 +1147,6 @@ packages:
       typescript: '>=5.7.2'
     dependencies:
       typescript: 5.8.2
-    dev: false
 
   /@types/babel__core@7.20.5:
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}

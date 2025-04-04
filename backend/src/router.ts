@@ -1,28 +1,22 @@
 import { initTRPC } from "@trpc/server";
-import { z } from "zod";
+// Import schemas from the new central location with updated names
+import { AgentRequestSchema, AgentResponseSchema } from "./schemas";
 import { generateAgentResponse } from "./agentService"; // Import the new service
 
 const t = initTRPC.create();
 
-// Define the schema for a single message in the conversation
-const messageSchema = z.object({
-  role: z.enum(["user", "assistant"]), // Adjust roles as needed based on frontend
-  content: z.string(),
-});
-
-// Define the input schema for the generateResponse procedure
-const generateResponseInputSchema = z.object({
-  messages: z.array(messageSchema),
-  repositoryUrl: z.string().optional(), // Included but not used yet
-  complianceData: z.any().optional(), // Included but not used yet
-});
+// Input schema is now imported
+// Output schema is also defined for clarity, although mutation returns it directly
 
 export const appRouter = t.router({
   generateResponse: t.procedure
-    .input(generateResponseInputSchema)
+    .input(AgentRequestSchema) // Use the renamed schema for input validation
+    .output(AgentResponseSchema) // Define the renamed expected output schema
     .mutation(async ({ input }) => {
       // Call the extracted service function
-      return generateAgentResponse(input);
+      // The service function should now return data conforming to AgentResponseSchema
+      const result = await generateAgentResponse(input);
+      return result; // tRPC will validate this against AgentResponseSchema
     }),
 });
 

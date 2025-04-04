@@ -1,4 +1,13 @@
 import { TRPCError } from "@trpc/server";
+import { z } from "zod"; // Import zod
+// Import the centralized schemas/types with updated names
+import {
+  AgentRequest, // Renamed from BackendPayload
+  AgentResponse, // Renamed from BackendResponse
+  ChatMessageSchema, // Needed for constructing the response message
+  ComplianceContentSchema, // Potentially needed if updating compliance data
+  StoredChatMessage, // Import this type for explicit typing
+} from "./schemas";
 import {
   HumanMessage,
   AIMessage,
@@ -14,43 +23,27 @@ import { getMcpServers } from "./mcpServers";
 import { getLlm } from "./llm";
 import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
 
-// Define the schema for a single message
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-// Define the input for the agent service function
-interface GenerateAgentResponseInput {
-  messages: Message[];
-  repositoryUrl?: string; // Included but not used yet
-  complianceData?: any; // Included but not used yet
-}
-
-// Define the output for the agent service function
-interface GenerateAgentResponseOutput {
-  role: "assistant";
-  content: string;
-}
+// Old interfaces are removed, using imported types now
 
 export const generateAgentResponse = async (
-  input: GenerateAgentResponseInput
-): Promise<GenerateAgentResponseOutput> => {
+  input: AgentRequest // Use the renamed AgentRequest type
+): Promise<AgentResponse> => { // Return type is now AgentResponse
   const llm = getLlm();
 
   // Prepend the system message
   const systemMessage = new SystemMessage(
-    "You are a general helper agent that can use MCP servers to help the user."
+    "You are a general helper agent that can use MCP servers to help the user. When you have used a tool, you always provide a direct answer to the user query based on the information gathered by your tool usage."
   );
 
-  // Convert frontend messages to Langchain format
+  // Convert frontend messages (StoredChatMessage format) to Langchain format
   const conversationHistory: (HumanMessage | AIMessage)[] = input.messages.map(
-    (msg) => {
+    (msg: StoredChatMessage) => { // Add explicit type for msg
+      // msg now has { role: 'user' | 'agent', text: string, timestamp: string }
       if (msg.role === "user") {
-        return new HumanMessage(msg.content);
+        return new HumanMessage(msg.text); // Use msg.text
       } else {
-        // assistant
-        return new AIMessage(msg.content);
+        // agent
+        return new AIMessage(msg.text); // Use msg.text
       }
     }
   );
@@ -82,9 +75,21 @@ export const generateAgentResponse = async (
     }
     responseContent = lastMessage.content;
 
+    // Construct the response according to BackendResponseSchema
+    const responseMessage: z.infer<typeof ChatMessageSchema> = {
+      role: "agent", // Use 'agent' role as defined in schema
+      text: responseContent,
+      timestamp: new Date().toISOString(), // Generate a new timestamp
+    };
+
+    // For now, we don't update compliance data in this basic interaction
+    // In a more complex scenario, the agent might modify input.complianceData
+    // and return it here.
+    const updatedComplianceData = undefined; // Or potentially input.complianceData if no changes
+
     return {
-      role: "assistant",
-      content: responseContent,
+      newMessage: responseMessage,
+      updatedComplianceData: updatedComplianceData, // Explicitly return undefined or the data
     };
 
   } catch (error: any) {
