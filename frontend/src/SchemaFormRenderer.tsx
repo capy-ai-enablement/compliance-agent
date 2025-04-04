@@ -1,5 +1,5 @@
 import React from 'react';
-import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault } from 'zod';
+import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault, ZodLazy } from 'zod'; // Added ZodLazy here
 import { ComplianceData } from './schema';
 
 interface SchemaFormRendererProps {
@@ -10,10 +10,16 @@ interface SchemaFormRendererProps {
     fullData: ComplianceData; // Pass the full original data down for updates
 }
 
-// Helper to get the underlying type if it's wrapped (e.g., ZodDefault)
+// Removed duplicated import line
+
+// Helper to get the underlying type if it's wrapped (e.g., ZodDefault, ZodLazy)
 function getBaseType(schema: ZodTypeAny): ZodTypeAny {
     if (schema instanceof ZodDefault) {
         return getBaseType(schema._def.innerType);
+    }
+    if (schema instanceof ZodLazy) {
+        // Unwrap ZodLazy to get the actual schema definition
+        return getBaseType(schema.schema);
     }
     // Add other wrappers like ZodOptional if needed
     return schema;
