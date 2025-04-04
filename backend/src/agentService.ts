@@ -27,17 +27,32 @@ import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
 
 export const generateAgentResponse = async (
   input: AgentRequest // Use the renamed AgentRequest type
-): Promise<AgentResponse> => { // Return type is now AgentResponse
+): Promise<AgentResponse> => {
+  // Return type is now AgentResponse
   const llm = getLlm();
 
   // Prepend the system message
-  const systemMessage = new SystemMessage(
-    "You are a general helper agent that can use MCP servers to help the user. When you have used a tool, you always provide a direct answer to the user query based on the information gathered by your tool usage."
+  const baseInstructionMessage = new SystemMessage(
+    "You are a compliance helper agent. You can use tools in order to look at a repository and guide the user in building a compliance report. The user will have specified a repository that you are to look at and you will also be given a current state of the compliance report. When you have used a tool, you always provide a direct answer to the user query based on the information gathered by your tool usage."
   );
+  const repoInstructionMessage = new SystemMessage(
+    `The user has provided the following repository to be inspected: ${input.repositoryUrl}`
+  );
+  const currentStateInstructionMessage = new SystemMessage(
+    `This is the current state of the compliance report: ${JSON.stringify(
+      input.complianceData
+    )}`
+  );
+  const systemMessages = [
+    baseInstructionMessage,
+    repoInstructionMessage,
+    currentStateInstructionMessage,
+  ];
 
   // Convert frontend messages (StoredChatMessage format) to Langchain format
   const conversationHistory: (HumanMessage | AIMessage)[] = input.messages.map(
-    (msg: StoredChatMessage) => { // Add explicit type for msg
+    (msg: StoredChatMessage) => {
+      // Add explicit type for msg
       // msg now has { role: 'user' | 'agent', text: string, timestamp: string }
       if (msg.role === "user") {
         return new HumanMessage(msg.text); // Use msg.text
@@ -48,7 +63,10 @@ export const generateAgentResponse = async (
     }
   );
 
-  const langchainMessages: BaseMessage[] = [systemMessage, ...conversationHistory];
+  const langchainMessages: BaseMessage[] = [
+    ...systemMessages,
+    ...conversationHistory,
+  ];
   let mcpCleanup: McpServerCleanupFn | undefined;
   let responseContent: string;
 
@@ -67,11 +85,14 @@ export const generateAgentResponse = async (
     // Extract the last message content
     const lastMessage = result.messages[result.messages.length - 1];
     if (!lastMessage || typeof lastMessage.content !== "string") {
-        console.error("LLM response content is not a string or message is missing:", lastMessage);
-        throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Received unexpected response format from LLM.",
-        });
+      console.error(
+        "LLM response content is not a string or message is missing:",
+        lastMessage
+      );
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Received unexpected response format from LLM.",
+      });
     }
     responseContent = lastMessage.content;
 
@@ -91,12 +112,11 @@ export const generateAgentResponse = async (
       newMessage: responseMessage,
       updatedComplianceData: updatedComplianceData, // Explicitly return undefined or the data
     };
-
   } catch (error: any) {
     console.error("Error invoking LLM agent:", error);
     // Re-throw TRPCError or wrap other errors
     if (error instanceof TRPCError) {
-        throw error;
+      throw error;
     }
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
