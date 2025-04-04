@@ -472,8 +472,8 @@ function App() {
                     : "bg-gray-200 text-gray-800"
                 }`}
               >
-                {/* Wrap ReactMarkdown in a div for styling */}
-                <div className="prose prose-sm max-w-none">
+                {/* Wrap ReactMarkdown in a div for styling, add prose-invert for user messages */}
+                <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {msg.text}
                   </ReactMarkdown>
