@@ -42,27 +42,36 @@ export const initialComplianceData: ComplianceData = {
     mitigations: [],
 };
 
-// Schema for the chat message structure
+// Schema for the chat message structure (using ISO string for timestamp for easier storage)
 export const ChatMessageSchema = z.object({
     sender: z.enum(['user', 'agent']),
     text: z.string(),
-    timestamp: z.date(), // Add timestamp for ordering
+    // Store timestamp as ISO 8601 string for reliable JSON serialization/deserialization
+    timestamp: z.string().datetime({ message: "Invalid ISO 8601 timestamp string" }),
 });
 
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+// Type for runtime use (convert timestamp back to Date object after loading)
+export type ChatMessage = {
+    sender: 'user' | 'agent';
+    text: string;
+    timestamp: Date; // Use Date object in runtime state
+};
 
-// Schema for the state sent to the backend
+// Type helper for the stored format
+export type StoredChatMessage = z.infer<typeof ChatMessageSchema>;
+
+// Schema for the state sent to the backend (uses the stored format with string timestamps)
 export const BackendPayloadSchema = z.object({
     repositoryUrl: z.string().url(),
     complianceData: ComplianceContentSchema,
-    messages: z.array(ChatMessageSchema),
+    messages: z.array(ChatMessageSchema), // Array of messages with string timestamps
 });
 
 export type BackendPayload = z.infer<typeof BackendPayloadSchema>;
 
-// Schema for the response from the backend
+// Schema for the response from the backend (uses the stored format with string timestamps)
 export const BackendResponseSchema = z.object({
-    newMessage: ChatMessageSchema,
+    newMessage: ChatMessageSchema, // Message with string timestamp
     updatedComplianceData: ComplianceContentSchema.optional(), // Compliance data might not always be updated
 });
 

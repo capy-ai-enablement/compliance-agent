@@ -14,9 +14,17 @@ import JSONInput from 'react-json-editor-ajrm';
 import locale from 'react-json-editor-ajrm/locale/en';
 
 
+import {
+    ChatMessageSchema, // Import the schema for validation
+    StoredChatMessage, // Import the type for stored messages
+    // ... other imports
+} from './schema';
+// ... other imports
+
 // --- Local Storage Keys ---
 const REPO_URL_STORAGE_KEY = 'complianceAgentRepoUrl';
 const COMPLIANCE_DATA_STORAGE_KEY = 'complianceAgentData';
+const CHAT_MESSAGES_STORAGE_KEY = 'complianceAgentMessages'; // New key for messages
 
 function App() {
     const [repositoryUrl, setRepositoryUrl] = useState<string>('');
@@ -24,32 +32,38 @@ function App() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false); // For future API calls
     const [error, setError] = useState<string | null>(null); // For displaying errors
+    const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true); // Flag for initial load
 
     // --- Load state from Local Storage on mount ---
     useEffect(() => {
+        console.log("Effect: Loading from localStorage START");
         // Load Repository URL
         const storedRepoUrl = localStorage.getItem(REPO_URL_STORAGE_KEY);
         if (storedRepoUrl) {
             try {
-                // Basic validation, could add URL validation if needed
-                setRepositoryUrl(z.string().parse(storedRepoUrl));
+                const parsedUrl = z.string().parse(storedRepoUrl);
+                console.log("Effect: Loaded Repo URL:", parsedUrl);
+                setRepositoryUrl(parsedUrl);
             } catch (e) {
                 console.error("Failed to parse stored repository URL:", e);
                 localStorage.removeItem(REPO_URL_STORAGE_KEY); // Clear invalid data
             }
+        } else {
+             console.log("Effect: No Repo URL found in localStorage.");
         }
 
         // Load Compliance Data
-        const storedData = localStorage.getItem(COMPLIANCE_DATA_STORAGE_KEY);
-        if (storedData) {
+        const storedComplianceData = localStorage.getItem(COMPLIANCE_DATA_STORAGE_KEY);
+        if (storedComplianceData) {
             try {
-                const parsedData = JSON.parse(storedData);
+                const parsedData = JSON.parse(storedComplianceData);
                 // Validate against the schema before setting state
-                const validationResult = ComplianceContentSchema.safeParse(parsedData);
-                if (validationResult.success) {
-                    setComplianceData(validationResult.data);
+                const complianceValidationResult = ComplianceContentSchema.safeParse(parsedData);
+                if (complianceValidationResult.success) {
+                    console.log("Effect: Loaded valid Compliance Data:", complianceValidationResult.data);
+                    setComplianceData(complianceValidationResult.data);
                 } else {
-                    console.error("Stored compliance data failed validation:", validationResult.error);
+                    console.error("Stored compliance data failed validation:", complianceValidationResult.error);
                     setError("Failed to load saved data. It might be corrupted. Resetting to default.");
                     localStorage.removeItem(COMPLIANCE_DATA_STORAGE_KEY); // Clear invalid data
                     setComplianceData(initialComplianceData); // Reset to initial
@@ -60,8 +74,44 @@ function App() {
                 localStorage.removeItem(COMPLIANCE_DATA_STORAGE_KEY); // Clear invalid data
                 setComplianceData(initialComplianceData); // Reset on parse error
             }
+        } else {
+             console.log("Effect: No Compliance Data found in localStorage.");
         }
-    }, []); // Empty dependency array ensures this runs only once on mount
+
+        // Load Chat Messages
+        const storedMessagesData = localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+        if (storedMessagesData) {
+            try {
+                const parsedMessages = JSON.parse(storedMessagesData);
+                // Validate the array of messages with string timestamps
+                const messagesValidationResult = z.array(ChatMessageSchema).safeParse(parsedMessages);
+
+                if (messagesValidationResult.success) {
+                    // Convert string timestamps back to Date objects for runtime state
+                    const runtimeMessages: ChatMessage[] = messagesValidationResult.data.map(msg => ({
+                        ...msg,
+                        timestamp: new Date(msg.timestamp), // Parse ISO string back to Date
+                    }));
+                    console.log("Effect: Loaded valid Messages:", runtimeMessages);
+                    setMessages(runtimeMessages);
+                } else {
+                    console.error("Stored chat messages failed validation:", messagesValidationResult.error);
+                    setError("Failed to load chat history. It might be corrupted. Clearing history.");
+                    localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY); // Clear invalid data
+                    setMessages([]); // Reset to empty
+                }
+            } catch (e) {
+                 console.error("Failed to parse stored chat messages:", e);
+                 setError("Failed to load chat history. Clearing history.");
+                 localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY); // Clear invalid data
+                 setMessages([]); // Reset on parse error
+            }
+        } else {
+             console.log("Effect: No Messages found in localStorage.");
+         }
+         console.log("Effect: Loading from localStorage END");
+         setIsInitialLoad(false); // Mark initial load as complete
+     }, []); // Empty dependency array ensures this runs only once on mount
 
     // --- Save state to Local Storage on change ---
     useEffect(() => {
@@ -81,6 +131,25 @@ function App() {
             setError("Failed to save progress.");
         }
     }, [complianceData]);
+
+    // Save messages to local storage
+     useEffect(() => {
+        // Only save after the initial load is complete
+        if (isInitialLoad) {
+            return;
+        }
+        try {
+            // Convert Date objects back to ISO strings before saving
+            const messagesToStore: StoredChatMessage[] = messages.map(msg => ({
+                ...msg,
+                timestamp: msg.timestamp.toISOString(), // Convert Date to ISO string
+            }));
+            localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messagesToStore));
+        } catch (e) {
+            console.error("Failed to save chat messages to local storage:", e);
+            setError("Failed to save chat history.");
+        }
+    }, [messages, isInitialLoad]); // Run whenever messages or isInitialLoad changes (after initial load)
 
     // --- Event Handlers ---
     const handleUrlChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,20 +200,25 @@ function App() {
         setError(null);
 
         // --- Mock Backend Interaction ---
+        // Prepare payload with string timestamps for backend (good practice)
+        const messagesForBackend: StoredChatMessage[] = [...messages, userMessage].map(msg => ({
+             ...msg,
+             timestamp: msg.timestamp.toISOString(),
+        }));
         console.log("Sending to backend (mock):", {
             repositoryUrl,
             complianceData,
-            messages: [...messages, userMessage],
+            messages: messagesForBackend, // Send with string timestamps
         });
 
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // Mock response
-        const mockAgentResponse: ChatMessage = {
+        // Mock response (simulate backend sending string timestamp)
+        const mockAgentResponseStored: StoredChatMessage = {
             sender: 'agent',
             text: `Received: "${messageText}". I'm just a mock response for now.`,
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(), // Send string timestamp
         };
         // Mock compliance data update (optional) - e.g., add a dummy law
         const mockUpdatedData = {
@@ -152,11 +226,17 @@ function App() {
             lawsAndRegulations: [...complianceData.lawsAndRegulations, `Mock Law related to "${messageText.substring(0,10)}..."`]
         };
 
-        // Simulate receiving response
-        setMessages(prev => [...prev, mockAgentResponse]);
+        // Simulate receiving response and converting timestamp back to Date for runtime state
+        const mockAgentResponseRuntime: ChatMessage = {
+            ...mockAgentResponseStored,
+            timestamp: new Date(mockAgentResponseStored.timestamp), // Convert back to Date
+        };
+        setMessages(prev => [...prev, mockAgentResponseRuntime]);
+
         // Uncomment below to simulate data update from backend
-        // handleComplianceDataChange(mockUpdatedData);
-        console.log("Received from backend (mock):", { newMessage: mockAgentResponse, updatedComplianceData: mockUpdatedData });
+        // handleComplianceDataChange(mockUpdatedData); // Assuming handleComplianceDataChange expects ComplianceData type
+
+        console.log("Received from backend (mock):", { newMessage: mockAgentResponseStored, updatedComplianceData: mockUpdatedData });
         // --- End Mock Backend Interaction ---
 
 
@@ -211,6 +291,7 @@ function App() {
 
 
     // --- Render ---
+    console.log("Render: Current complianceData state:", complianceData); // Log state before render
     return (
         <div className="flex h-screen bg-gray-100 font-sans">
             {/* Left Panel: Repo URL + Compliance Data Editor */}
@@ -237,19 +318,19 @@ function App() {
                     </div>
                 )}
 
-                {/* Compliance Data Display/Editor Area */}
-                {/* Compliance Data Display/Editor Area */}
-                {/* Use a key derived from repositoryUrl to force re-mount when URL changes, effectively resetting editor state if needed */}
-                <div className="flex-grow bg-white border border-gray-300 rounded-md overflow-hidden flex flex-col">
-                    <h2 className="text-lg font-semibold p-4 pb-2 text-gray-800 border-b border-gray-200">
-                        Compliance Data Editor
+                 {/* Compliance Data Display/Editor Area */}
+                 <div className="flex-grow bg-white border border-gray-300 rounded-md overflow-hidden flex flex-col">
+                     <h2 className="text-lg font-semibold p-4 pb-2 text-gray-800 border-b border-gray-200">
+                         Compliance Data Editor {/* Removed duplicate h2 */}
                     </h2>
-                    <div className="flex-grow overflow-auto">
-                         {/* JSON Editor Component */}
-                         <JSONInput
-                            id='compliance-json-editor'
-                            // Use complianceData as the initial placeholder/content
-                            // The editor manages its internal state but syncs via onChange
+                     <div className="flex-grow overflow-auto"> {/* Ensure this div takes up remaining space */}
+                          {/* JSON Editor Component */}
+                          <JSONInput
+                             // Add a key that changes when the data is loaded/reset
+                             // Stringify is simple but potentially slow for large objects; consider a unique ID if performance becomes an issue.
+                             key={`json-editor-${JSON.stringify(complianceData)}`}
+                             id='compliance-json-editor'
+                             // placeholder now correctly initializes the editor due to the key change
                             placeholder={complianceData}
                             // Pass the locale for labels/messages
                             locale={locale}

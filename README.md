@@ -30,7 +30,7 @@ Dev features
 
 ### Frontend view
 
-- Chat sidebar always visible on the right, just one conversation (list of messages), not stored in any state (lost on browser reload)
+- Chat sidebar always visible on the right, just one conversation (list of messages)
 - repo url at the top
 - zod schema display on the left with structured JSON content as input, zod structure as static
 
