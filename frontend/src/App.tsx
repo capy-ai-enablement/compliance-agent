@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 import SchemaFormRenderer from "./SchemaFormRenderer";
 import { trpc } from "./trpc";
+import { TRPCClientError } from "@trpc/client"; // Import for error handling
 
 // --- Constants ---
 const REPO_URL_STORAGE_KEY = "complianceAgentRepoUrl";
@@ -21,10 +22,10 @@ type ComplianceSectionKey = keyof ComplianceData;
 
 // Define the tabs based on the schema structure
 const TABS: { key: ComplianceSectionKey; label: string }[] = [
-    { key: 'general', label: 'General' },
-    { key: 'lawsAndRegulations', label: 'Laws & Regulations' },
-    { key: 'dataPoints', label: 'Data Points' },
-    { key: 'threatsAndVulnerabilities', label: 'Threats & Vulnerabilities' },
+  { key: "general", label: "General" },
+  { key: "lawsAndRegulations", label: "Laws & Regulations" },
+  { key: "dataPoints", label: "Data Points" },
+  { key: "threatsAndVulnerabilities", label: "Threats & Vulnerabilities" },
 ];
 
 function App() {
@@ -33,13 +34,13 @@ function App() {
     initialComplianceData
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  // const [isLoading, setIsLoading] = useState<boolean>(false); // Replaced by mutation.isPending
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<ComplianceSectionKey>(TABS[0].key); // State for active tab
 
-  // --- tRPC Query Example ---
-  const helloQuery = trpc.hello.useQuery({ name: "Frontend" });
+  // --- tRPC Mutation for generating response ---
+  const generateResponseMutation = trpc.generateResponse.useMutation();
 
   // --- Load state from Local Storage on mount ---
   useEffect(() => {
@@ -56,19 +57,30 @@ function App() {
     }
 
     // Load Compliance Data
-    const storedComplianceData = localStorage.getItem(COMPLIANCE_DATA_STORAGE_KEY);
+    const storedComplianceData = localStorage.getItem(
+      COMPLIANCE_DATA_STORAGE_KEY
+    );
     if (storedComplianceData) {
       try {
         const parsedData = JSON.parse(storedComplianceData);
         // Use safeParse to handle potential schema mismatches after updates
-        const complianceValidationResult = ComplianceContentSchema.safeParse(parsedData);
+        const complianceValidationResult =
+          ComplianceContentSchema.safeParse(parsedData);
         if (complianceValidationResult.success) {
           // Merge loaded data with initial data to ensure all keys exist,
           // especially after schema changes.
-          setComplianceData({ ...initialComplianceData, ...complianceValidationResult.data });
+          setComplianceData({
+            ...initialComplianceData,
+            ...complianceValidationResult.data,
+          });
         } else {
-          console.error("Stored compliance data failed validation:", complianceValidationResult.error);
-          setError("Failed to load saved data due to structure mismatch. Resetting to default.");
+          console.error(
+            "Stored compliance data failed validation:",
+            complianceValidationResult.error
+          );
+          setError(
+            "Failed to load saved data due to structure mismatch. Resetting to default."
+          );
           setComplianceData(initialComplianceData); // Reset to default if validation fails
           localStorage.removeItem(COMPLIANCE_DATA_STORAGE_KEY); // Clear corrupted data
         }
@@ -85,16 +97,24 @@ function App() {
     if (storedMessagesData) {
       try {
         const parsedMessages = JSON.parse(storedMessagesData);
-        const messagesValidationResult = z.array(ChatMessageSchema).safeParse(parsedMessages);
+        const messagesValidationResult = z
+          .array(ChatMessageSchema)
+          .safeParse(parsedMessages);
         if (messagesValidationResult.success) {
-          const runtimeMessages: ChatMessage[] = messagesValidationResult.data.map((msg) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp), // Convert ISO string back to Date
-          }));
+          const runtimeMessages: ChatMessage[] =
+            messagesValidationResult.data.map((msg) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp), // Convert ISO string back to Date
+            }));
           setMessages(runtimeMessages);
         } else {
-          console.error("Stored chat messages failed validation:", messagesValidationResult.error);
-          setError("Failed to load chat history. It might be corrupted. Clearing history.");
+          console.error(
+            "Stored chat messages failed validation:",
+            messagesValidationResult.error
+          );
+          setError(
+            "Failed to load chat history. It might be corrupted. Clearing history."
+          );
           localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY);
           setMessages([]);
         }
@@ -120,7 +140,10 @@ function App() {
   useEffect(() => {
     if (isInitialLoad) return;
     try {
-      localStorage.setItem(COMPLIANCE_DATA_STORAGE_KEY, JSON.stringify(complianceData));
+      localStorage.setItem(
+        COMPLIANCE_DATA_STORAGE_KEY,
+        JSON.stringify(complianceData)
+      );
     } catch (e) {
       console.error("Failed to save compliance data:", e);
       setError("Failed to save progress.");
@@ -134,7 +157,10 @@ function App() {
         ...msg,
         timestamp: msg.timestamp.toISOString(), // Convert Date to ISO string
       }));
-      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messagesToStore));
+      localStorage.setItem(
+        CHAT_MESSAGES_STORAGE_KEY,
+        JSON.stringify(messagesToStore)
+      );
     } catch (e) {
       console.error("Failed to save chat messages:", e);
       setError("Failed to save chat history.");
@@ -151,25 +177,51 @@ function App() {
 
   const handleSendMessage = useCallback(
     async (messageText: string) => {
-      if (!messageText.trim() || isLoading) return;
-      const userMessage: ChatMessage = { sender: "user", text: messageText, timestamp: new Date() };
-      setMessages((prev) => [...prev, userMessage]);
-      setIsLoading(true);
+      if (!messageText.trim() || generateResponseMutation.isPending) return; // Use mutation's loading state
+
+      const userMessage: ChatMessage = {
+        role: "user",
+        text: messageText,
+        timestamp: new Date(),
+      };
+      const currentMessages = [...messages, userMessage];
+      setMessages(currentMessages); // Add user message immediately
       setError(null);
 
-      // --- Mock Backend Interaction (Keep as is for now) ---
-      const messagesForBackend: StoredChatMessage[] = [...messages, userMessage].map((msg) => ({ ...msg, timestamp: msg.timestamp.toISOString() }));
-      console.log("Sending to backend (mock):", { repositoryUrl, complianceData, messages: messagesForBackend });
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const mockAgentResponseStored: StoredChatMessage = { sender: "agent", text: `Received: "${messageText}". I'm just a mock response for now.`, timestamp: new Date().toISOString() };
-      const mockAgentResponseRuntime: ChatMessage = { ...mockAgentResponseStored, timestamp: new Date(mockAgentResponseStored.timestamp) };
-      setMessages((prev) => [...prev, mockAgentResponseRuntime]);
-      console.log("Received from backend (mock):", { newMessage: mockAgentResponseStored });
-      // --- End Mock Backend Interaction ---
+      // Prepare messages for the backend (map sender/text to role/content with type assertion)
+      const messagesForBackend = currentMessages.map((msg) => ({
+        role: (msg.role === "user" ? "user" : "assistant") as
+          | "user"
+          | "assistant", // Assert role type
+        content: msg.text,
+      }));
 
-      setIsLoading(false);
+      try {
+        const response = await generateResponseMutation.mutateAsync({
+          messages: messagesForBackend,
+          repositoryUrl: repositoryUrl || undefined, // Pass optional fields
+          complianceData: complianceData || undefined,
+        });
+
+        // Add agent response
+        const agentMessage: ChatMessage = {
+          role: "agent",
+          text: response.content, // Assuming response has { role: 'assistant', content: string }
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, agentMessage]);
+      } catch (err) {
+        console.error("Error calling generateResponse:", err);
+        let errorMessage = "Failed to get response from agent.";
+        if (err instanceof TRPCClientError) {
+          errorMessage = `Error: ${err.message}`; // Show specific tRPC error
+        }
+        setError(errorMessage);
+        // Optionally remove the user's message if the call failed
+        // setMessages(messages);
+      }
     },
-    [repositoryUrl, complianceData, messages, isLoading]
+    [messages, repositoryUrl, complianceData, generateResponseMutation] // Add mutation to dependencies
   );
 
   const handleResetChat = useCallback(() => {
@@ -186,7 +238,6 @@ function App() {
     return complianceData[activeTab];
   }, [complianceData, activeTab]);
 
-
   // --- Render ---
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
@@ -194,7 +245,12 @@ function App() {
       <div className="flex-grow flex flex-col p-4 overflow-hidden">
         {/* Repository URL Input */}
         <div className="mb-4">
-          <label htmlFor="repoUrl" className="block text-sm font-medium text-gray-700 mb-1">Repository URL</label>
+          <label
+            htmlFor="repoUrl"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Repository URL
+          </label>
           <input
             type="url"
             id="repoUrl"
@@ -205,18 +261,11 @@ function App() {
           />
         </div>
 
-        {/* tRPC Query Example Display */}
-        <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded">
-          <h3 className="font-semibold">tRPC Backend Status:</h3>
-          {helloQuery.isLoading && <p>Loading...</p>}
-          {helloQuery.error && <p>Error: {helloQuery.error.message}</p>}
-          {helloQuery.data && <p>Data: {helloQuery.data}</p>}
-        </div>
-
-        {/* Error Display */}
-        {error && (
+        {/* Error Display (includes tRPC mutation errors now) - Removed duplicate block */}
+        {(error || generateResponseMutation.error) && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-            <strong>Error:</strong> {error}
+            <strong>Error:</strong>{" "}
+            {error || generateResponseMutation.error?.message}
           </div>
         )}
 
@@ -231,10 +280,10 @@ function App() {
                   onClick={() => setActiveTab(tab.key)}
                   className={`${
                     activeTab === tab.key
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? "border-indigo-500 text-indigo-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   } whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm`}
-                  aria-current={activeTab === tab.key ? 'page' : undefined}
+                  aria-current={activeTab === tab.key ? "page" : undefined}
                 >
                   {tab.label}
                 </button>
@@ -281,12 +330,12 @@ function App() {
             <div
               key={index}
               className={`flex ${
-                msg.sender === "user" ? "justify-end" : "justify-start"
+                msg.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
               <div
                 className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow ${
-                  msg.sender === "user"
+                  msg.role === "user"
                     ? "bg-blue-500 text-white"
                     : "bg-gray-200 text-gray-800"
                 }`}
@@ -301,7 +350,8 @@ function App() {
               </div>
             </div>
           ))}
-          {isLoading && (
+          {/* Use mutation's loading state */}
+          {generateResponseMutation.isPending && (
             <div className="flex justify-start">
               <div className="px-4 py-2 rounded-lg shadow bg-gray-200 text-gray-500 italic">
                 Agent is thinking...
@@ -319,7 +369,7 @@ function App() {
               ) as HTMLInputElement;
               if (input) {
                 handleSendMessage(input.value);
-                input.value = "";
+                input.value = ""; // Clear input after sending
               }
             }}
           >
@@ -329,16 +379,16 @@ function App() {
                 name="messageInput"
                 placeholder="Type your message..."
                 className="flex-grow p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-                disabled={isLoading}
+                disabled={generateResponseMutation.isPending} // Disable input while loading
               />
               <button
                 type="submit"
                 className={`px-4 py-2 rounded-md text-white font-semibold ${
-                  isLoading
+                  generateResponseMutation.isPending // Adjust button style/state based on mutation
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-blue-500 hover:bg-blue-600"
                 }`}
-                disabled={isLoading}
+                disabled={generateResponseMutation.isPending} // Disable button while loading
               >
                 Send
               </button>

@@ -36,7 +36,6 @@ coverage/
 .env.development.local
 .env.test.local
 .env.production.local
-.env.*
 
 # IDEs and editors
 .vscode/

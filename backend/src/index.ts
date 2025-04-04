@@ -3,6 +3,10 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import cors from 'cors'; // Need CORS for frontend interaction
 import { appRouter } from './router'; // Import the router
 
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 const app: Express = express();
 const port = process.env.PORT || 3001; // Use 3001 to avoid conflict with frontend default (5173)
 
