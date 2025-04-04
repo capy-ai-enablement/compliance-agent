@@ -39,7 +39,6 @@ Dev features
 - typescript
 - pnpm
 - react vite webpage frontend
-- material ui v6
 - tailwind css
 - node express backend
 - docker for backend

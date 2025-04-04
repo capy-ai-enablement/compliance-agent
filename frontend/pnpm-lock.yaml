@@ -14,12 +14,21 @@ dependencies:
   '@mui/material':
     specifier: ^7.0.1
     version: 7.0.1(@emotion/react@11.14.0)(@emotion/styled@11.14.0)(@types/react@19.1.0)(react-dom@19.1.0)(react@19.1.0)
+  '@types/react-json-editor-ajrm':
+    specifier: ^2.5.6
+    version: 2.5.6
   react:
     specifier: ^19.0.0
     version: 19.1.0
   react-dom:
     specifier: ^19.0.0
     version: 19.1.0(react@19.1.0)
+  react-json-editor-ajrm:
+    specifier: ^2.5.14
+    version: 2.5.14(react-dom@19.1.0)(react@19.1.0)
+  zod:
+    specifier: ^3.24.2
+    version: 3.24.2
 
 devDependencies:
   '@eslint/js':
@@ -1131,6 +1140,12 @@ packages:
     dependencies:
       '@types/react': 19.1.0
     dev: true
+
+  /@types/react-json-editor-ajrm@2.5.6:
+    resolution: {integrity: sha512-Dk8WUF0UPzHCnDfgNQ7EBtjZRsHLZPfjm/fFZOrHVO4TbD1EQpKS/i8p3EpVEnvgE5LJack35eAxFjxN1UWMnA==}
+    dependencies:
+      '@types/react': 19.1.0
+    dev: false
 
   /@types/react-transition-group@4.4.12(@types/react@19.1.0):
     resolution: {integrity: sha512-8TV6R3h2j7a91c+1DXdJi3Syo69zzIZbz7Lg5tORM5LEJG7X/E6a1V3drRyBRZq7/utz7A+c4OgYLiLcYGHG6w==}
@@ -2306,6 +2321,17 @@ packages:
     resolution: {integrity: sha512-Oe56aUPnkHyyDxxkvqtd7KkdQP5uIUfHxd5XTb3wE9d/kRnZLmKbDB0GWk919tdQ+mxxPtG6EAs6RMT6i1qtHg==}
     dev: false
 
+  /react-json-editor-ajrm@2.5.14(react-dom@19.1.0)(react@19.1.0):
+    resolution: {integrity: sha512-z2035l5lnU0Wo73AUonj68d1Eh9vjVcLXEa8YogDEeFPcogzYkfT6R38fvYlLKDhP0oI+LyOO/IBWsFkXs4M0Q==}
+    peerDependencies:
+      react: '>=16.2.0'
+      react-dom: '>=16.2.0'
+    dependencies:
+      '@babel/runtime': 7.27.0
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+    dev: false
+
   /react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
@@ -2720,3 +2746,7 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
+
+  /zod@3.24.2:
+    resolution: {integrity: sha512-lY7CDW43ECgW9u1TcT3IoXHflywfVqDYze4waEz812jR/bZ8FHDsl7pFQoSZTz5N+2NqRXs8GBwnAwo3ZNxqhQ==}
+    dev: false
