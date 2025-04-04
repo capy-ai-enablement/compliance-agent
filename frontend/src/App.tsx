@@ -9,6 +9,7 @@ import {
 } from "./schema"; // Assuming schema.ts is in the same directory
 import { z } from "zod";
 import SchemaFormRenderer from "./SchemaFormRenderer"; // Import the new component
+import { trpc } from "./trpc"; // Import the tRPC hook
 
 import {
   ChatMessageSchema, // Import the schema for validation
@@ -31,6 +32,10 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false); // For future API calls
   const [error, setError] = useState<string | null>(null); // For displaying errors
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true); // Flag for initial load
+
+  // --- tRPC Query Example ---
+  // Call the 'hello' procedure from the backend
+  const helloQuery = trpc.hello.useQuery({ name: 'Frontend' });
 
   // --- Load state from Local Storage on mount ---
   useEffect(() => {
@@ -187,6 +192,15 @@ function App() {
           <label htmlFor="repoUrl" className="block text-sm font-medium text-gray-700 mb-1">Repository URL</label>
           <input type="url" id="repoUrl" value={repositoryUrl} onChange={handleUrlChange} placeholder="https://github.com/user/repo" className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"/>
         </div>
+
+        {/* tRPC Query Example Display */}
+        <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded">
+          <h3 className="font-semibold">tRPC Backend Status:</h3>
+          {helloQuery.isLoading && <p>Loading...</p>}
+          {helloQuery.error && <p>Error: {helloQuery.error.message}</p>}
+          {helloQuery.data && <p>Data: {helloQuery.data}</p>}
+        </div>
+
         {/* Error Display */}
         {error && (<div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"><strong>Error:</strong> {error}</div>)}
         {/* Compliance Data Form Area */}
