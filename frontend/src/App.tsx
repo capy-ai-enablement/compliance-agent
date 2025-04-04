@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 // Import schemas from the backend
 import {
   ComplianceContentSchema,
@@ -401,12 +403,17 @@ function App() {
                   msg.role === "user"
                     ? "bg-blue-500 text-white"
                     : "bg-gray-200 text-gray-800"
-                }`}
-              >
-                <p className="text-sm">{msg.text}</p>
-                <p className="text-xs text-right mt-1 opacity-70">
-                  {msg.timestamp.toLocaleTimeString([], {
-                    hour: "2-digit",
+                 }`}
+                >
+                  {/* Wrap ReactMarkdown in a div for styling */}
+                  <div className="prose prose-sm max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
+                  <p className="text-xs text-right mt-1 opacity-70">
+                    {msg.timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </p>
