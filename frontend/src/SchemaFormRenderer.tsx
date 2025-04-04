@@ -1,12 +1,14 @@
 import React from 'react';
-import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault, z } from 'zod'; // Added z import
-import { ComplianceData } from './schema'; // Assuming schema types are exported
+// Removed unused z import: import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault, z } from 'zod';
+import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault } from 'zod'; // Keep necessary imports
+import { ComplianceData } from './schema';
 
 interface SchemaFormRendererProps {
-    schema: ZodObject<z.ZodRawShape>; // Use z.ZodRawShape instead of any
-    data: ComplianceData;
-    onDataChange: (newData: ComplianceData) => void;
-    path?: string[]; // To track the path for nested updates
+    schema: ZodTypeAny; // Accept any Zod type for recursion
+    data: unknown; // Use unknown for data passed down during recursion
+    onDataChange: (newData: ComplianceData) => void; // Top-level change handler
+    path?: (string | number)[]; // Path can include numbers for array indices
+    fullData: ComplianceData; // Pass the full original data down for updates
 }
 
 // Helper to get the underlying type if it's wrapped (e.g., ZodDefault)
@@ -18,142 +20,172 @@ function getBaseType(schema: ZodTypeAny): ZodTypeAny {
     return schema;
 }
 
+// Helper to generate a default value based on schema type (basic version)
+function generateDefaultValue(schema: ZodTypeAny): unknown { // Return unknown
+    const baseType = getBaseType(schema);
+    if (baseType instanceof ZodString) return '';
+    if (baseType instanceof ZodArray) return [];
+    if (baseType instanceof ZodObject) {
+        // Recursively generate defaults for object properties
+        const shape = baseType.shape;
+        const defaultObject: Record<string, unknown> = {}; // Use Record<string, unknown>
+        Object.keys(shape).forEach(key => {
+            defaultObject[key] = generateDefaultValue(shape[key]);
+        });
+        return defaultObject;
+    }
+    // Add other types like ZodBoolean, ZodNumber etc. if needed
+    return undefined; // Default for unhandled types
+}
+
 
 const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
     schema,
-    data,
+    data, // This 'data' now refers to the specific part of the structure being rendered
     onDataChange,
     path = [],
+    fullData, // Use fullData for making immutable updates
 }) => {
-    const shape = schema.shape;
 
-    // Helper function to handle data updates immutably
-    const handleInputChange = (
-        currentPath: string[],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        value: any // Acknowledging 'any' is needed here for flexibility
+    // Helper function to handle data updates immutably using the full data object
+    const handleValueChange = (
+        currentPath: (string | number)[],
+        value: unknown // Use unknown
     ) => {
-        const newData = JSON.parse(JSON.stringify(data)); // Deep copy for immutability
-        let currentLevel = newData;
+        const newData = JSON.parse(JSON.stringify(fullData)); // Deep copy the original full data
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let currentLevel: any = newData; // Use any here for dynamic navigation, checked below
+
+        // Navigate to the parent of the target element
         for (let i = 0; i < currentPath.length - 1; i++) {
             const key = currentPath[i];
+            if (typeof currentLevel !== 'object' || currentLevel === null) {
+                console.error("Error navigating path in handleValueChange", currentPath, key);
+                return; // Stop if path is invalid
+            }
              // Ensure nested objects/arrays exist
              if (currentLevel[key] === undefined || currentLevel[key] === null) {
-                 // Determine if the next level should be an array or object based on schema/path
-                 // This part needs refinement based on actual schema structure if paths involve arrays
-                 currentLevel[key] = {}; // Defaulting to object, might need adjustment
+                 const nextKeyIsIndex = typeof currentPath[i+1] === 'number';
+                 currentLevel[key] = nextKeyIsIndex ? [] : {};
              }
             currentLevel = currentLevel[key];
         }
-        currentLevel[currentPath[currentPath.length - 1]] = value;
-        onDataChange(newData);
+
+         // Ensure the parent level is an object or array before setting the value
+         if (typeof currentLevel !== 'object' || currentLevel === null) {
+             console.error("Error finding parent level in handleValueChange", currentPath);
+             return;
+         }
+
+        // Set the value at the final key/index
+        const finalKey = currentPath[currentPath.length - 1];
+        currentLevel[finalKey] = value;
+        onDataChange(newData); // Trigger update with the modified full data structure
     };
 
-    return (
-        <div className="space-y-4 p-4">
-            {Object.keys(shape).map((key) => {
-                const fieldSchema = getBaseType(shape[key]);
-                const currentPath = [...path, key];
-                 // Type acc as any within the reduce callback to satisfy ESLint
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const fieldData = currentPath.reduce((acc: any, k: string) => acc?.[k], data);
-                const description = shape[key].description || key; // Use description or key name
+    const baseSchema = getBaseType(schema);
 
-                // --- Render Logic based on Schema Type ---
+    // --- Render Logic for Objects ---
+    if (baseSchema instanceof ZodObject) {
+        const shape = baseSchema.shape;
+        // Ensure data is an object before trying to access keys
+        const objectData = (typeof data === 'object' && data !== null && !Array.isArray(data)) ? data : {};
 
-                // ZodString
-                if (fieldSchema instanceof ZodString) {
+        return (
+            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200' : 'p-4'}`}>
+                {Object.keys(shape).map((key) => {
+                    const fieldSchema = shape[key];
+                    const currentPath = [...path, key];
+                    const fieldData = (objectData as Record<string, unknown>)?.[key]; // Access data safely
+                    const description = fieldSchema.description || key;
+
                     return (
                         <div key={currentPath.join('.')} className="mb-3">
-                            <label htmlFor={currentPath.join('.')} className="block text-sm font-medium text-gray-700 mb-1 capitalize">
-                                {description}
-                            </label>
-                            <textarea
-                                id={currentPath.join('.')}
-                                value={String(fieldData ?? '')} // Ensure value is a string
-                                onChange={(e) => handleInputChange(currentPath, e.target.value)}
-                                rows={3}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                             {!(getBaseType(fieldSchema) instanceof ZodArray) && (
+                                <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+                                    {description}
+                                </label>
+                             )}
+                            <SchemaFormRenderer
+                                schema={fieldSchema}
+                                data={fieldData} // Pass down the specific part of the data
+                                onDataChange={onDataChange}
+                                path={currentPath}
+                                fullData={fullData}
                             />
                         </div>
                     );
-                }
+                })}
+            </div>
+        );
+    }
 
-                // ZodArray (Basic String Array for now)
-                if (fieldSchema instanceof ZodArray) {
-                    const elementType = getBaseType(fieldSchema.element);
-                    // Ensure fieldData is treated as an array, default to empty array if null/undefined
-                    const arrayData = Array.isArray(fieldData) ? fieldData : [];
+    // --- Render Logic for Arrays ---
+    if (baseSchema instanceof ZodArray) {
+        const elementType = baseSchema.element;
+        const arrayData = Array.isArray(data) ? data : [];
+        const description = schema.description || 'Items';
 
-                    if (elementType instanceof ZodString) {
-                        return (
-                            <div key={currentPath.join('.')} className="mb-3 p-3 border rounded-md bg-gray-50">
-                                <label className="block text-sm font-medium text-gray-700 mb-2 capitalize">
-                                    {description}
-                                </label>
-                                {arrayData.map((item, index) => (
-                                    <div key={index} className="flex items-center mb-2">
-                                        <input
-                                            type="text"
-                                            value={item}
-                                            onChange={(e) => {
-                                                const newArray = [...arrayData];
-                                                newArray[index] = e.target.value;
-                                                handleInputChange(currentPath, newArray);
-                                            }}
-                                            className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mr-2"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const newArray = arrayData.filter((_, i) => i !== index);
-                                                handleInputChange(currentPath, newArray);
-                                            }}
-                                            className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                ))}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const newArray = [...arrayData, '']; // Add empty string
-                                        handleInputChange(currentPath, newArray);
-                                    }}
-                                    className="mt-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                                >
-                                    Add Item
-                                </button>
-                            </div>
-                        );
-                    }
-                     // TODO: Add rendering for arrays of objects (recursive call)
-                }
-
-                 // ZodObject (Recursive Call)
-                 if (fieldSchema instanceof ZodObject) {
-                     return (
-                         <div key={currentPath.join('.')} className="mb-3 p-3 border rounded-md">
-                              <h3 className="text-md font-semibold mb-2 text-gray-800 capitalize">{description}</h3>
-                              <SchemaFormRenderer
-                                 schema={fieldSchema}
-                                 data={data} // Pass full data down
-                                 onDataChange={onDataChange}
-                                 path={currentPath} // Pass down the nested path
-                             />
-                         </div>
-                     );
-                 }
-
-
-                // Default fallback for unhandled types
-                return (
-                    <div key={currentPath.join('.')} className="text-gray-500 text-sm">
-                        Unsupported field type for: {key} ({fieldSchema._def.typeName})
+        return (
+            <div className="mb-3 p-3 border rounded-md bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 mb-2 capitalize">
+                    {description}
+                </label>
+                {arrayData.map((item, index) => (
+                    <div key={index} className="flex items-start mb-3 p-2 border rounded bg-white shadow-sm">
+                        <div className="flex-grow">
+                             <SchemaFormRenderer
+                                schema={elementType} // Pass the schema for the element type
+                                data={item} // Pass the specific item data
+                                onDataChange={onDataChange}
+                                path={[...path, index]} // Path includes the array index
+                                fullData={fullData}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const newArray = arrayData.filter((_, i) => i !== index);
+                                handleValueChange(path, newArray); // Update the array at the current path
+                            }}
+                            className="ml-2 mt-1 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs self-start"
+                        >
+                            Remove
+                        </button>
                     </div>
-                );
-            })}
+                ))}
+                <button
+                    type="button"
+                    onClick={() => {
+                        const newItem = generateDefaultValue(elementType); // Generate default based on element schema
+                        const newArray = [...arrayData, newItem];
+                        handleValueChange(path, newArray); // Update the array at the current path
+                    }}
+                    className="mt-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                >
+                    Add {elementType.description || 'Item'}
+                </button>
+            </div>
+        );
+    }
+
+    // --- Render Logic for Primitives (String) ---
+    if (baseSchema instanceof ZodString) {
+        return (
+            <textarea
+                id={path.join('.')}
+                value={String(data ?? '')} // Ensure value is a string
+                onChange={(e) => handleValueChange(path, e.target.value)}
+                rows={3}
+                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+        );
+    }
+
+    // --- Fallback for Unsupported Types ---
+    return (
+        <div className="text-gray-500 text-sm">
+            Unsupported field type at path: {path.join('.')} ({baseSchema._def.typeName})
         </div>
     );
 };

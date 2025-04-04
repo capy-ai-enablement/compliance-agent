@@ -200,6 +200,7 @@ function App() {
                 schema={ComplianceContentSchema} // Pass the Zod schema
                 data={complianceData}
                 onDataChange={setComplianceData} // Pass the state setter
+                fullData={complianceData} // Pass the full data for updates
               />
             )}
           </div>
