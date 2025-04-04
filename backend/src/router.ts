@@ -7,7 +7,6 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 
-
 const t = initTRPC.create();
 
 // Define the schema for a single message in the conversation
@@ -49,7 +48,7 @@ const getLlm = () => {
       temperature: 0.7, // Optional: Adjust temperature
     });
   } else if (hasOpenAIConfig) {
-    console.log("Using OpenAI");
+    // console.log("Using OpenAI");
     return new ChatOpenAI({
       openAIApiKey: openaiApiKey,
       modelName: "gpt-4o", // Optional: Specify model if needed
