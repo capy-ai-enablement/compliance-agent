@@ -1,5 +1,5 @@
 import React from 'react';
-import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodDefault, ZodLazy } from 'zod'; // Added ZodLazy here
+import { ZodTypeAny, ZodObject, ZodArray, ZodString, ZodNumber, ZodDefault, ZodLazy } from 'zod'; // Added ZodNumber and ZodLazy
 import { ComplianceData } from './schema';
 
 interface SchemaFormRendererProps {
@@ -29,6 +29,11 @@ function getBaseType(schema: ZodTypeAny): ZodTypeAny {
 function generateDefaultValue(schema: ZodTypeAny): unknown {
     const baseType = getBaseType(schema);
     if (baseType instanceof ZodString) return '';
+    if (baseType instanceof ZodNumber) {
+        // Default to min value if available, otherwise 0 or undefined? Let's use 1 for CIA.
+        const minCheck = baseType._def.checks.find(check => check.kind === 'min');
+        return minCheck ? minCheck.value : 1; // Default to 1 for CIA ratings
+    }
     if (baseType instanceof ZodArray) return [];
     if (baseType instanceof ZodObject) {
         // Recursively generate defaults for object properties
@@ -123,16 +128,28 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
         const shape = baseSchema.shape;
         const objectData = (typeof data === 'object' && data !== null && !Array.isArray(data)) ? data : {};
 
+        // Check if the current path points to a 'cia' object within 'dataPoints'
+        const isCiaObject = path.length >= 2 && path[path.length - 1] === 'cia' && path[path.length - 3] === 'dataPoints';
+
+        // Apply flex row styling specifically for the CIA object
+        const containerClasses = isCiaObject
+            ? `flex flex-row gap-4 items-start ${path.length > 0 ? 'ml-1' : 'p-4'}` // Horizontal layout for CIA
+            : `space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200 ml-1' : 'p-4'}`; // Default vertical layout
+
         return (
-            <div className={`space-y-4 ${path.length > 0 ? 'pl-4 border-l border-gray-200 ml-1' : 'p-4'}`}>
+            <div className={containerClasses}>
                 {Object.keys(shape).map((key) => {
                     const fieldSchema = shape[key];
                     const currentPath = [...path, key];
                     const fieldData = (objectData as Record<string, unknown>)?.[key];
+                    // Removed duplicate fieldData declaration
                     const description = fieldSchema.description || key;
 
+                    // Adjust layout for individual fields within the CIA object
+                    const fieldContainerClasses = isCiaObject ? "flex-1" : "mb-3"; // Use flex-1 for CIA fields, mb-3 otherwise
+
                     return (
-                        <div key={currentPath.join('.')} className="mb-3">
+                        <div key={currentPath.join('.')} className={fieldContainerClasses}>
                              {/* Render label only if not rendering an array directly */}
                              {!(getBaseType(fieldSchema) instanceof ZodArray) && (
                                 <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
@@ -203,7 +220,7 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
         );
     }
 
-    // --- Render Logic for Primitives (String) ---
+    // --- Render Logic for Primitives (String, Number) ---
     if (baseSchema instanceof ZodString) {
         return (
             <textarea
@@ -215,6 +232,37 @@ const SchemaFormRenderer: React.FC<SchemaFormRendererProps> = ({
             />
         );
     }
+
+    if (baseSchema instanceof ZodNumber) {
+        // Extract min/max constraints if they exist in the schema definition
+        const minCheck = baseSchema._def.checks.find(check => check.kind === 'min');
+        const maxCheck = baseSchema._def.checks.find(check => check.kind === 'max');
+        const minValue = minCheck ? minCheck.value : undefined;
+        const maxValue = maxCheck ? maxCheck.value : undefined;
+
+        return (
+            <input
+                type="number"
+                value={String(data ?? (minValue ?? ''))} // Default to min value if data is null/undefined
+                onChange={(e) => {
+                    const numValue = e.target.value === '' ? minValue ?? null : parseInt(e.target.value, 10); // Default to min or null if empty
+                    // Only update if it's a valid number or null (if allowed, though our schema requires a number)
+                    if (numValue !== null && !isNaN(numValue)) {
+                         handleValueChange(path, numValue);
+                    } else if (minValue !== undefined) {
+                        // If cleared or invalid, reset to minimum if defined
+                        handleValueChange(path, minValue);
+                    }
+                    // If no min value and invalid, maybe do nothing or handle differently?
+                    // For CIA, resetting to 1 (min) seems reasonable.
+                }}
+                min={minValue}
+                max={maxValue}
+                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+        );
+    }
+
 
     // --- Fallback for Unsupported Types ---
     return (

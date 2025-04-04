@@ -11,10 +11,10 @@ User features
 - The agent will help you identify:
   - Relevant laws and regulations to your repo
   - Data points
-  - CIA of each data point
-    - Confidentiality
-    - Integrity
-    - Availability
+  - CIA of each data point (rated 1-4)
+    - Confidentiality (1-4)
+    - Integrity (1-4)
+    - Availability (1-4)
   - Threats and vulnerabilities
   - Mitigations
 - Outputs

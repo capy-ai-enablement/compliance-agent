@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 // Define sub-schemas first for clarity
 const CiaSchema = z.object({
-  confidentiality: z.string().describe("Confidentiality requirements/level"),
-  integrity: z.string().describe("Integrity requirements/level"),
-  availability: z.string().describe("Availability requirements/level"),
-}).describe("CIA Triad Assessment");
+  confidentiality: z.number().min(1).max(4).describe("Confidentiality rating (1-4)"),
+  integrity: z.number().min(1).max(4).describe("Integrity rating (1-4)"),
+  availability: z.number().min(1).max(4).describe("Availability rating (1-4)"),
+}).describe("CIA Triad Assessment (Ratings 1-4)");
 
 const DataPointSchema = z.object({
   name: z.string().describe("Name or description of the data point"),
