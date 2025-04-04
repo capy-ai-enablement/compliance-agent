@@ -38,11 +38,7 @@ export function getMcpServers(): McpServersConfig {
     fetch: {
       command: "uvx",
       args: ["mcp-server-fetch"],
-    },
-    airbnb: {
-      command: "npx",
-      args: ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"],
-    },
+    }
   };
 
   if (process.env.BRAVE_API_KEY) {

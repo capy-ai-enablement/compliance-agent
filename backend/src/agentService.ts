@@ -5,9 +5,11 @@ import {
   AgentRequest, // Renamed from BackendPayload
   AgentResponse, // Renamed from BackendResponse
   ChatMessageSchema, // Needed for constructing the response message
-  ComplianceContentSchema, // Potentially needed if updating compliance data
+  ComplianceContentSchema, // Import the main schema for the parser
   StoredChatMessage, // Import this type for explicit typing
+  ComplianceData, // Import the ComplianceData type
 } from "./schemas";
+import { StructuredOutputParser } from "@langchain/core/output_parsers"; // Import the parser
 import {
   HumanMessage,
   AIMessage,
@@ -18,6 +20,7 @@ import {
   convertMcpToLangchainTools,
   McpServerCleanupFn,
 } from "./langchainMcpTools";
+// Re-enable createReactAgent
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { getMcpServers } from "./mcpServers";
 import { getLlm } from "./llm";
@@ -31,23 +34,23 @@ export const generateAgentResponse = async (
   // Return type is now AgentResponse
   const llm = getLlm();
 
-  // Prepend the system message
-  const baseInstructionMessage = new SystemMessage(
-    "You are a compliance helper agent. You can use tools in order to look at a repository and guide the user in building a compliance report. The user will have specified a repository that you are to look at and you will also be given a current state of the compliance report. When you have used a tool, you always provide a direct answer to the user query based on the information gathered by your tool usage."
+  // Create the structured output parser
+  const parser = StructuredOutputParser.fromZodSchema(ComplianceContentSchema);
+
+  // Prepend the system message, instructing the React Agent about structured output
+  // Note: React agent might add conversational text around the JSON. We'll parse the last message.
+  const systemPrompt = new SystemMessage(
+    `You are a compliance helper agent. Use the available tools to analyze the repository at ${
+      input.repositoryUrl
+    } and assist the user in building a compliance report.
+The current state of the report is: ${JSON.stringify(input.complianceData)}
+
+Your primary goal is to update this compliance report based on the user's request and your findings from tool usage. When the users asks to update the compliance data you are to include a updatedComplianceData in your response.
+After completing your reasoning and any necessary tool calls, your FINAL response message MUST be ONLY the updated compliance data formatted as a JSON object adhering to the following schema. Do NOT include any other text, explanations, or conversational filler in the final message content itself; just the JSON. DO NOT include backticks \`\`\` or any other text, just the JSON output as it will be parsed DIRECTLY through a JSON parser.
+
+JSON Schema for the final output:
+${parser.getFormatInstructions()}`
   );
-  const repoInstructionMessage = new SystemMessage(
-    `The user has provided the following repository to be inspected: ${input.repositoryUrl}`
-  );
-  const currentStateInstructionMessage = new SystemMessage(
-    `This is the current state of the compliance report: ${JSON.stringify(
-      input.complianceData
-    )}`
-  );
-  const systemMessages = [
-    baseInstructionMessage,
-    repoInstructionMessage,
-    currentStateInstructionMessage,
-  ];
 
   // Convert frontend messages (StoredChatMessage format) to Langchain format
   const conversationHistory: (HumanMessage | AIMessage)[] = input.messages.map(
@@ -64,7 +67,7 @@ export const generateAgentResponse = async (
   );
 
   const langchainMessages: BaseMessage[] = [
-    ...systemMessages,
+    systemPrompt,
     ...conversationHistory,
   ];
   let mcpCleanup: McpServerCleanupFn | undefined;
@@ -75,42 +78,80 @@ export const generateAgentResponse = async (
     const { tools, cleanup } = await convertMcpToLangchainTools(mcpServers);
     mcpCleanup = cleanup;
 
+    // Create the React Agent
     const agent = createReactAgent({
-      llm: llm as ChatOpenAI | AzureChatOpenAI, // Cast needed as getLlm has inferred type
+      llm,
       tools,
+      // We provide the system message directly in the messages array below
     });
 
-    const result = await agent.invoke({ messages: langchainMessages });
+    // Invoke the React Agent
+    const agentResult = await agent.invoke({ messages: langchainMessages });
 
-    // Extract the last message content
-    const lastMessage = result.messages[result.messages.length - 1];
-    if (!lastMessage || typeof lastMessage.content !== "string") {
+    // Extract the *last* message content from the agent's response sequence
+    const lastMessage = agentResult.messages[agentResult.messages.length - 1];
+    if (
+      !lastMessage ||
+      typeof lastMessage.content !== "string" ||
+      lastMessage.content.trim() === ""
+    ) {
       console.error(
-        "LLM response content is not a string or message is missing:",
+        "Agent's final message content is not a non-empty string or message is missing:",
         lastMessage
       );
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Received unexpected response format from LLM.",
-      });
+      // Provide a generic error message if the agent failed to respond correctly
+      const errorResponseMessage: z.infer<typeof ChatMessageSchema> = {
+        role: "agent",
+        text: "Sorry, I encountered an issue generating the response. Please check the logs.",
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        newMessage: errorResponseMessage,
+        updatedComplianceData: undefined,
+      };
+      // Or throw TRPCError if preferred:
+      // throw new TRPCError({
+      //   code: "INTERNAL_SERVER_ERROR",
+      //   message: "Received unexpected final response format from agent.",
+      // });
     }
-    responseContent = lastMessage.content;
+    responseContent = lastMessage.content; // This should be the JSON string
 
-    // Construct the response according to BackendResponseSchema
+    let parsedData: ComplianceData | undefined;
+    let chatMessageText: string;
+
+    try {
+      // Attempt to parse the structured data from the agent's final message
+      parsedData = await parser.parse(responseContent);
+      // If parsing succeeds, create a user-friendly chat message
+      chatMessageText =
+        "I've updated the compliance data based on your request and my findings.";
+      console.log(
+        "Successfully parsed compliance data from agent:",
+        parsedData
+      );
+    } catch (parseError) {
+      console.error(
+        "Failed to parse agent's final message into structured data:",
+        parseError
+      );
+      console.error("Raw final message content:", responseContent);
+      // If parsing fails, use a message indicating the issue and potentially include the raw response
+      chatMessageText = `I gathered some information, but had trouble formatting the final compliance data update. Here's the raw response: \n\n${responseContent}`;
+      // parsedData remains undefined
+    }
+
+    // Construct the response message
     const responseMessage: z.infer<typeof ChatMessageSchema> = {
-      role: "agent", // Use 'agent' role as defined in schema
-      text: responseContent,
-      timestamp: new Date().toISOString(), // Generate a new timestamp
+      role: "agent",
+      text: chatMessageText,
+      timestamp: new Date().toISOString(),
     };
 
-    // For now, we don't update compliance data in this basic interaction
-    // In a more complex scenario, the agent might modify input.complianceData
-    // and return it here.
-    const updatedComplianceData = undefined; // Or potentially input.complianceData if no changes
-
+    // Return the new message and the parsed compliance data (if successful)
     return {
       newMessage: responseMessage,
-      updatedComplianceData: updatedComplianceData, // Explicitly return undefined or the data
+      updatedComplianceData: parsedData, // This will be undefined if parsing failed
     };
   } catch (error: any) {
     console.error("Error invoking LLM agent:", error);
