@@ -194,11 +194,24 @@ function App() {
       if (!messageText.trim() || generateResponseMutation.isPending) return;
 
       // --- Frontend Validation ---
-      // Validate repository URL before sending
-      const urlValidation = z.string().url().safeParse(repositoryUrl);
+      // Use the placeholder URL if the input is empty, otherwise use the input
+      const defaultRepoUrl = "https://github.com/capy-ai-enablement/compliance-agent";
+      const urlToUse = repositoryUrl.trim() === "" ? defaultRepoUrl : repositoryUrl;
+
+      // Validate the URL that will be used (either user input or default)
+      const urlValidation = z.string().url().safeParse(urlToUse);
       if (!urlValidation.success) {
-        setError("Please enter a valid repository URL before sending a message.");
-        return; // Stop execution if URL is invalid
+        // Only show error if the user actually typed something invalid
+        if (repositoryUrl.trim() !== "") {
+            setError("Please enter a valid repository URL or leave it blank to use the default.");
+            return; // Stop execution if user input is invalid
+        } else {
+            // If the default URL is somehow invalid (should not happen), log error but proceed
+            console.error("Default repository URL failed validation:", urlValidation.error);
+            // Optionally, you could set an error state here too, but it might be confusing
+            // setError("Default repository URL seems invalid. Please contact support.");
+            // return; // Decide if you want to block sending even if the default is broken
+        }
       }
       // --- End Frontend Validation ---
 
@@ -225,7 +238,7 @@ function App() {
       // Use the renamed input type
       const payload: AgentRequestInput = {
         messages: messagesForBackend,
-        repositoryUrl: repositoryUrl, // Pass repositoryUrl (required by backend schema)
+        repositoryUrl: urlToUse, // Pass the determined URL (user input or default)
         complianceData: complianceData, // Pass complianceData (required by backend schema)
       };
 
@@ -306,7 +319,7 @@ function App() {
             id="repoUrl"
             value={repositoryUrl}
             onChange={handleUrlChange}
-            placeholder="https://github.com/user/repo"
+            placeholder="https://github.com/capy-ai-enablement/compliance-agent"
             className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
