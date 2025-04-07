@@ -57,7 +57,6 @@ Dev features
 - react vite webpage frontend
 - tailwind css
 - node express backend
-- docker for backend
 - Langchain for LLM interaction
 - MCP servers as langchain tools
 
