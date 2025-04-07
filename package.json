@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"pnpm --filter frontend dev\" \"pnpm --filter backend dev\"",
+    "install": "cd frontend && pnpm i && cd ../backend && pnpm i && cd ..",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

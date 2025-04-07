@@ -12,6 +12,7 @@ Installation and setup
 
 Usage
 
+- `pnpm install`
 - `pnpm dev`
 - open `localhost:5173` in the browser
 
